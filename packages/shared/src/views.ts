@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { effectiveType, type Field } from "./fields";
+import { effectiveType, type Field, type FieldType } from "./fields";
 
-export const VIEW_TYPES = ["grid", "kanban", "calendar", "gallery"] as const;
+export const VIEW_TYPES = ["grid", "kanban", "calendar", "gallery", "form"] as const;
 export type ViewType = (typeof VIEW_TYPES)[number];
 
 // ---------- operators per field type ----------
@@ -67,6 +67,25 @@ export type FilterCondition = z.infer<typeof filterConditionSchema>;
 export const sortSchema = z.object({ fieldId: z.string(), direction: z.enum(["asc", "desc"]) });
 export type SortSpec = z.infer<typeof sortSchema>;
 
+export const formFieldSchema = z.object({
+  fieldId: z.string(),
+  required: z.boolean().default(false),
+  /** Question text shown instead of the field name (optional). */
+  label: z.string().max(300).default(""),
+  help: z.string().max(1000).default(""),
+});
+export type FormField = z.infer<typeof formFieldSchema>;
+
+export const formConfigSchema = z.object({
+  title: z.string().max(200).default(""),
+  description: z.string().max(5000).default(""),
+  fields: z.array(formFieldSchema).max(100).default([]),
+  submitText: z.string().max(60).default("Submit"),
+  successMessage: z.string().max(1000).default("Thank you! Your response has been recorded."),
+  allowAnother: z.boolean().default(true),
+});
+export type FormConfig = z.infer<typeof formConfigSchema>;
+
 export const viewConfigSchema = z.object({
   filters: z
     .object({
@@ -89,7 +108,14 @@ export const viewConfigSchema = z.object({
   coverFieldId: z.string().nullable().default(null),
   coverFit: z.enum(["cover", "contain"]).default("cover"),
   cardSize: z.enum(["small", "medium", "large"]).default("medium"),
+  /** Form: what the public form looks like and which fields it asks for. */
+  form: formConfigSchema.default({}),
 });
+
+/** Field types a public form can ask for (no calculated fields; no links, which would expose other records). */
+export const FORM_FIELD_TYPES = new Set<FieldType>([
+  "singleLineText", "longText", "number", "checkbox", "singleSelect", "multipleSelect", "date", "email", "url", "phone", "attachment",
+]);
 
 /** Can this field place records on a calendar? */
 export function isDateLike(field: Pick<Field, "type" | "options">): boolean {

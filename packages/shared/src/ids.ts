@@ -1,7 +1,7 @@
 const ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
 /** Airtable-style ids: a 3-letter prefix + 14 random chars, e.g. "tbl8fK2...". */
-export type IdPrefix = "usr" | "wsp" | "bse" | "tbl" | "fld" | "rec" | "viw" | "sel" | "ses" | "att" | "cmt" | "inv";
+export type IdPrefix = "usr" | "wsp" | "bse" | "tbl" | "fld" | "rec" | "viw" | "sel" | "ses" | "att" | "cmt" | "inv" | "shr";
 
 export function newId(prefix: IdPrefix): string {
   const bytes = new Uint8Array(14);

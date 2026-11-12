@@ -1,12 +1,28 @@
 import { useQuery } from "@tanstack/react-query";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { api } from "./api";
 import { BasePage } from "./pages/BasePage";
 import { HomePage } from "./pages/HomePage";
 import { InvitePage } from "./pages/InvitePage";
 import { LoginPage } from "./pages/LoginPage";
+import { PublicFormPage } from "./pages/PublicFormPage";
+import { PublicViewPage } from "./pages/PublicViewPage";
 
 export function App() {
+  const { pathname } = useLocation();
+  // Shared forms and views are public: no sign-in, no account lookup.
+  if (pathname.startsWith("/f/") || pathname.startsWith("/v/")) {
+    return (
+      <Routes>
+        <Route path="/f/:token" element={<PublicFormPage />} />
+        <Route path="/v/:token" element={<PublicViewPage />} />
+      </Routes>
+    );
+  }
+  return <SignedInApp />;
+}
+
+function SignedInApp() {
   const me = useQuery({ queryKey: ["me"], queryFn: api.me });
   if (me.isLoading) return <div className="center"><div className="spinner" /></div>;
   if (me.isError) return <div className="center error">Can't reach the server. Is the API running?</div>;

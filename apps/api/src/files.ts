@@ -1,5 +1,5 @@
 import { newId, type AttachmentInfo } from "@brill/shared";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -88,11 +88,13 @@ function sizeLimit(max: number, label: string) {
 
 const commentBody = z.object({ body: z.string().trim().min(1).max(5000) });
 
-export function registerFiles(app: FastifyInstance, db: Db, filesDir: string) {
+export type SaveFile = (tableId: string, userId: string | null, filename: string, mime: string, stream: Readable, shareId?: string | null) => Promise<AttachmentInfo>;
+
+export function registerFiles(app: FastifyInstance, db: Db, filesDir: string): { saveFile: SaveFile; pathOf: (id: string, thumb?: boolean) => string } {
   const pathOf = (id: string, thumb = false) => join(filesDir, thumb ? `${id}.thumb.webp` : id);
 
   /** Store a stream as a new attachment of a table (thumbnail for images). */
-  async function saveFile(tableId: string, userId: string, filename: string, mimeIn: string, stream: Readable): Promise<AttachmentInfo> {
+  async function saveFile(tableId: string, userId: string | null, filename: string, mimeIn: string, stream: Readable, shareId: string | null = null): Promise<AttachmentInfo> {
     await mkdir(filesDir, { recursive: true });
     const id = newId("att");
     const dest = pathOf(id);
@@ -125,9 +127,9 @@ export function registerFiles(app: FastifyInstance, db: Db, filesDir: string) {
       }
     }
     const row = await db.one(
-      `INSERT INTO attachments (id, table_id, filename, mime, size, width, height, has_thumb, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [id, tableId, name, mime, size, width, height, hasThumb, userId],
+      `INSERT INTO attachments (id, table_id, filename, mime, size, width, height, has_thumb, created_by, share_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [id, tableId, name, mime, size, width, height, hasThumb, userId, shareId],
     );
     return toAttachmentInfo(row);
   }
@@ -223,46 +225,56 @@ export function registerFiles(app: FastifyInstance, db: Db, filesDir: string) {
     const q = req.query as { thumb?: string; download?: string };
     const thumb = q.thumb === "1";
     const row = await attachmentWithAccess(user.id, id, "read");
-    if (thumb && !row.has_thumb) throw new HttpError(404, "No thumbnail");
-
-    const file = pathOf(id, thumb);
-    let size: number;
-    try {
-      size = (await stat(file)).size;
-    } catch {
-      throw new HttpError(404, "File is missing on the server");
-    }
-    const mime: string = thumb ? "image/webp" : row.mime;
-    const unsafe = UNSAFE_INLINE.test(mime);
-    const inline = !unsafe && INLINE_OK.test(mime) && q.download !== "1";
-    const encoded = encodeURIComponent(row.filename);
-    // PDFs need the browser's viewer, which a sandboxed CSP blocks; they can't run page scripts anyway.
-    const csp = mime === "application/pdf"
-      ? "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; object-src 'self'"
-      : "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox";
-    reply
-      .header("Content-Type", unsafe ? "application/octet-stream" : mime)
-      .header("Content-Disposition", `${inline ? "inline" : "attachment"}; filename="${encoded}"; filename*=UTF-8''${encoded}`)
-      .header("X-Content-Type-Options", "nosniff")
-      .header("Content-Security-Policy", csp)
-      .header("Accept-Ranges", "bytes")
-      .header("Cache-Control", "private, max-age=86400");
-
-    const range = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range ?? ""));
-    if (range && (range[1] || range[2])) {
-      let start = range[1] ? Number(range[1]) : size - Number(range[2]);
-      let end = range[1] && range[2] ? Number(range[2]) : size - 1;
-      start = Math.max(0, start);
-      end = Math.min(size - 1, end);
-      if (start > end || start >= size) {
-        return reply.status(416).header("Content-Range", `bytes */${size}`).send();
-      }
-      return reply
-        .status(206)
-        .header("Content-Range", `bytes ${start}-${end}/${size}`)
-        .header("Content-Length", end - start + 1)
-        .send(createReadStream(file, { start, end }));
-    }
-    return reply.header("Content-Length", size).send(createReadStream(file));
+    return streamAttachment(row, thumb, q.download === "1", req, reply, pathOf);
   });
+  return { saveFile, pathOf };
+}
+
+/** Send an attachment (or its thumbnail) with safe headers and HTTP range support. */
+export async function streamAttachment(
+  row: any, thumb: boolean, forceDownload: boolean, req: FastifyRequest, reply: FastifyReply, pathOf: (id: string, thumb?: boolean) => string,
+) {
+  const id: string = row.id;
+  const q = { download: forceDownload ? "1" : undefined };
+  if (thumb && !row.has_thumb) throw new HttpError(404, "No thumbnail");
+
+  const file = pathOf(id, thumb);
+  let size: number;
+  try {
+    size = (await stat(file)).size;
+  } catch {
+    throw new HttpError(404, "File is missing on the server");
+  }
+  const mime: string = thumb ? "image/webp" : row.mime;
+  const unsafe = UNSAFE_INLINE.test(mime);
+  const inline = !unsafe && INLINE_OK.test(mime) && q.download !== "1";
+  const encoded = encodeURIComponent(row.filename);
+  // PDFs need the browser's viewer, which a sandboxed CSP blocks; they can't run page scripts anyway.
+  const csp = mime === "application/pdf"
+    ? "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; object-src 'self'"
+    : "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox";
+  reply
+    .header("Content-Type", unsafe ? "application/octet-stream" : mime)
+    .header("Content-Disposition", `${inline ? "inline" : "attachment"}; filename="${encoded}"; filename*=UTF-8''${encoded}`)
+    .header("X-Content-Type-Options", "nosniff")
+    .header("Content-Security-Policy", csp)
+    .header("Accept-Ranges", "bytes")
+    .header("Cache-Control", "private, max-age=86400");
+
+  const range = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range ?? ""));
+  if (range && (range[1] || range[2])) {
+    let start = range[1] ? Number(range[1]) : size - Number(range[2]);
+    let end = range[1] && range[2] ? Number(range[2]) : size - 1;
+    start = Math.max(0, start);
+    end = Math.min(size - 1, end);
+    if (start > end || start >= size) {
+      return reply.status(416).header("Content-Range", `bytes */${size}`).send();
+    }
+    return reply
+      .status(206)
+      .header("Content-Range", `bytes ${start}-${end}/${size}`)
+      .header("Content-Length", end - start + 1)
+      .send(createReadStream(file, { start, end }));
+  }
+  return reply.header("Content-Length", size).send(createReadStream(file));
 }

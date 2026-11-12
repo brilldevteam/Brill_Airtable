@@ -257,7 +257,7 @@ export async function propagate(db: Db, schema: Schema, initial: Change[]) {
  * and recompute dependants. Returns the record's final cells.
  */
 export async function writeCells(
-  db: Db, schema: Schema, userId: string, tableId: string, recordId: string, patch: Cells,
+  db: Db, schema: Schema, userId: string | null, tableId: string, recordId: string, patch: Cells,
   history: "create" | "update" = "update",
 ): Promise<void> {
   const fields = await schema.fields(tableId);

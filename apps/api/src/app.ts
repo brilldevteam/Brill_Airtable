@@ -11,6 +11,7 @@ import { registerImportExport } from "./importExport";
 import { registerMembers } from "./members";
 import { registerRealtime } from "./realtime";
 import { registerRoutes } from "./routes";
+import { registerShare } from "./share";
 
 export interface AppOptions {
   secureCookies?: boolean;
@@ -54,10 +55,11 @@ export function buildApp(db: Db, opts: AppOptions) {
     registerAuth(app, db, { secureCookies: opts.secureCookies ?? false });
     registerRealtime(app, db);
     registerRoutes(app, db);
-    registerFiles(app, db, opts.filesDir);
+    const files = registerFiles(app, db, opts.filesDir);
     registerImportExport(app, db);
     registerMembers(app, db);
     registerActivity(app, db);
+    registerShare(app, db, files);
   });
   app.get("/api/health", async () => ({ ok: true }));
   return app;

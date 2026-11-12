@@ -23,6 +23,7 @@ import {
   VIEW_TYPES,
   viewConfigSchema,
   isDateLike,
+  FORM_FIELD_TYPES,
 } from "@brill/shared";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -337,6 +338,19 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
         ...config,
         dateFieldId: (tableFields.find((f) => f.type === "date") ?? tableFields.find((f) => isDateLike(f)))?.id ?? null,
         colorFieldId: config.colorFieldId ?? tableFields.find((f) => f.type === "singleSelect")?.id ?? null,
+      };
+    }
+    if (body.type === "form" && config.form.fields.length === 0) {
+      const table = await db.one<{ name: string; primary_field_id: string }>(`SELECT name, primary_field_id FROM tables WHERE id=$1`, [tableId]);
+      const usable = tableFields.filter((f) => FORM_FIELD_TYPES.has(f.type));
+      usable.sort((a, b) => (a.id === table!.primary_field_id ? -1 : b.id === table!.primary_field_id ? 1 : 0));
+      config = {
+        ...config,
+        form: {
+          ...config.form,
+          title: config.form.title || table!.name,
+          fields: usable.map((f) => ({ fieldId: f.id, required: f.id === table!.primary_field_id, label: "", help: "" })),
+        },
       };
     }
     if (body.type === "gallery" && !config.coverFieldId) {

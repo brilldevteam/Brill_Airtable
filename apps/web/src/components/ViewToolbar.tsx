@@ -11,9 +11,10 @@ import {
   type FilterOperator,
   type SortSpec,
 } from "@brill/shared";
-import { ArrowDownUp, CalendarDays, Check, Image as ImageIcon, Maximize, Palette, Download, EyeOff, FileUp, Kanban, ListFilter, MoreHorizontal, Plus, Rows3, Search, X } from "lucide-react";
+import { ArrowDownUp, CalendarDays, Check, Globe, Image as ImageIcon, Maximize, Palette, Download, EyeOff, FileUp, Kanban, ListFilter, MoreHorizontal, Plus, Rows3, Search, X } from "lucide-react";
 import { api } from "../api";
 import { ImportCsvDialog } from "./ImportCsvDialog";
+import { ShareLinkDialog } from "./ShareLinkDialog";
 import { useState } from "react";
 import { FieldIcon } from "./fieldIcons";
 import { ChoicePill, Popover, anchorOf, type Anchor } from "./Popover";
@@ -26,6 +27,7 @@ const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
 export function ViewToolbar({ ctx, recordCount, loading }: { ctx: ViewContext; recordCount: number; loading: boolean }) {
   const [open, setOpen] = useState<{ panel: Panel; anchor: Anchor } | null>(null);
   const [importing, setImporting] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const { view, allFields, updateConfig } = ctx;
   const cfg = view.config;
   const toggle = (panel: Panel) => (e: React.MouseEvent) => {
@@ -107,6 +109,9 @@ export function ViewToolbar({ ctx, recordCount, loading }: { ctx: ViewContext; r
       {ctx.canEdit && <button className="btn primary sm" onClick={() => ctx.addRecord()}><Plus size={14} /> Record</button>}
       {!ctx.canEdit && <span className="role-pill">{ctx.canComment ? "Can comment" : "Read only"}</span>}
       <button className="icon-btn" title="More" onClick={toggle("more")} style={{ marginLeft: 2 }}><MoreHorizontal size={17} /></button>
+      {sharing && (
+        <ShareLinkDialog viewId={view.id} viewName={view.name} isForm={false} canManage={ctx.canDesign} onClose={() => setSharing(false)} />
+      )}
       {importing && (
         <ImportCsvDialog tableId={ctx.tableId} fields={allFields} onDone={ctx.refresh} onClose={() => setImporting(false)} />
       )}
@@ -129,6 +134,7 @@ export function ViewToolbar({ ctx, recordCount, loading }: { ctx: ViewContext; r
           {open.panel === "more" && (
             <div className="menu">
               {ctx.canEdit && <button onClick={() => { setOpen(null); setImporting(true); }}><FileUp size={15} /> Import CSV…</button>}
+              <button onClick={() => { setOpen(null); setSharing(true); }}><Globe size={15} /> Share view (public link)…</button>
               <button onClick={() => { setOpen(null); window.location.href = api.exportCsvUrl(view.id); }}>
                 <Download size={15} /> Download CSV of this view
               </button>

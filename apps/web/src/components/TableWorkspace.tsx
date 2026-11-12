@@ -9,6 +9,7 @@ import { api, type FieldInput } from "../api";
 import { useDialogs } from "./Dialogs";
 import { FieldDialog } from "./FieldDialog";
 import { CalendarView } from "./CalendarView";
+import { FormBuilderView } from "./FormBuilderView";
 import { GalleryView } from "./GalleryView";
 import { GridView } from "./GridView";
 import { KanbanView } from "./KanbanView";
@@ -238,7 +239,7 @@ export function TableWorkspace({ baseId, tableId, tables, role }: { baseId: stri
         }}
       />
       <div className="view-main">
-        <ViewToolbar ctx={ctx} recordCount={ctx.records.length} loading={recordsQ.isFetching} />
+        {view.type !== "form" && <ViewToolbar ctx={ctx} recordCount={ctx.records.length} loading={recordsQ.isFetching} />}
         {error && <div className="error banner" onClick={() => setError(null)}>{error} (click to dismiss)</div>}
         {recordsQ.isLoading ? (
           <div className="center"><div className="spinner" /></div>
@@ -248,6 +249,8 @@ export function TableWorkspace({ baseId, tableId, tables, role }: { baseId: stri
           <CalendarView ctx={ctx} />
         ) : view.type === "gallery" ? (
           <GalleryView ctx={ctx} />
+        ) : view.type === "form" ? (
+          <FormBuilderView ctx={ctx} />
         ) : (
           <GridView ctx={ctx} />
         )}

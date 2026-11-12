@@ -174,6 +174,17 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX record_history_idx ON record_history (record_id, id)
   `,
+  /* 006 public share links (forms and read-only views) */ `
+  CREATE TABLE share_links (
+    id TEXT PRIMARY KEY,
+    view_id TEXT NOT NULL UNIQUE REFERENCES views(id) ON DELETE CASCADE,
+    token TEXT NOT NULL UNIQUE,
+    enabled BOOLEAN NOT NULL DEFAULT true,
+    created_by TEXT REFERENCES users(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+  ALTER TABLE attachments ADD COLUMN share_id TEXT
+  `,
 ];
 
 async function migrate(db: Db) {

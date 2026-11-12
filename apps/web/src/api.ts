@@ -27,6 +27,31 @@ export type Role = "owner" | "creator" | "editor" | "commenter" | "read";
 export interface Workspace { id: string; name: string; role: Role }
 export interface Member { userId: string; name: string; email: string; role: Role }
 export interface PendingInvite { id: string; email: string; role: Role; createdAt: string; expiresAt: string }
+export interface PublicFormField {
+  id: string;
+  type: FieldType;
+  label: string;
+  help: string;
+  required: boolean;
+  options: { choices?: { id: string; name: string; color: string }[]; precision?: number; includeTime?: boolean };
+}
+export interface PublicForm {
+  title: string;
+  description: string;
+  submitText: string;
+  successMessage: string;
+  allowAnother: boolean;
+  fields: PublicFormField[];
+}
+export interface PublicView {
+  base: { name: string; color: string };
+  table: { name: string; primaryFieldId: string | null };
+  view: { name: string; type: ViewType; config: { coverFieldId: string | null; coverFit: "cover" | "contain"; cardSize: "small" | "medium" | "large" } };
+  fields: Field[];
+  records: { id: string; cells: Record<string, import("@brill/shared").CellValue> }[];
+  labels: Record<string, string>;
+  files: Record<string, AttachmentInfo>;
+}
 export interface Comment { id: string; body: string; createdAt: string; userId: string; userName: string }
 export interface HistoryEntry {
   id: string; kind: "create" | "update" | "delete"; createdAt: string; userId: string | null; userName: string | null;
@@ -63,6 +88,33 @@ export const api = {
   removeMember: (wsId: string, userId: string) => call("DELETE", `/api/workspaces/${wsId}/members/${userId}`),
   inviteInfo: (token: string) => call<{ email: string; role: Role; workspace: string; invitedBy: string | null }>("GET", `/api/invites/${token}`),
   acceptInvite: (token: string) => call<{ workspaceId: string }>("POST", `/api/invites/${token}/accept`, {}),
+
+  viewShare: (viewId: string) => call<{ share: { token: string; enabled: boolean } | null }>("GET", `/api/views/${viewId}/share`),
+  enableShare: (viewId: string, regenerate = false) =>
+    call<{ share: { token: string; enabled: boolean } }>("POST", `/api/views/${viewId}/share`, { regenerate }),
+  disableShare: (viewId: string) => call("DELETE", `/api/views/${viewId}/share`),
+
+  // Public (no sign-in) — used by the shared form and shared view pages.
+  publicForm: (token: string) => call<{ base: { name: string; color: string }; form: PublicForm }>("GET", `/api/public/forms/${token}`),
+  publicFormUpload: (token: string, file: File, onProgress?: (p: number) => void) =>
+    new Promise<{ id: string; filename: string; size: number; mime: string }>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `/api/public/forms/${token}/attachments`);
+      xhr.setRequestHeader("X-Brill-Upload", "1");
+      xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total);
+      xhr.onload = () => {
+        let data: any = {};
+        try { data = JSON.parse(xhr.responseText); } catch { /* not JSON */ }
+        if (xhr.status >= 200 && xhr.status < 300) resolve(data.attachments[0]);
+        else reject(new ApiError(xhr.status, data.error ?? `Upload failed (${xhr.status})`));
+      };
+      xhr.onerror = () => reject(new ApiError(0, "Network error while uploading"));
+      const form = new FormData();
+      form.append("file", file, file.name);
+      xhr.send(form);
+    }),
+  publicFormSubmit: (token: string, cells: Record<string, unknown>) => call<{ ok: true }>("POST", `/api/public/forms/${token}/submit`, { cells }),
+  publicView: (token: string) => call<PublicView>("GET", `/api/public/views/${token}`),
 
   recordComments: (recordId: string) => call<{ comments: Comment[] }>("GET", `/api/records/${recordId}/comments`),
   addRecordComment: (recordId: string, body: string) => call<{ comment: Comment }>("POST", `/api/records/${recordId}/comments`, { body }),

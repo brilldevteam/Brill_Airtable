@@ -33,9 +33,11 @@ Works today:
 
 - **Team sharing** (Share button on a base): members and roles — Owner, Creator (builds tables/fields), Editor (edits records), Commenter, Read only. Inviting an existing user adds them at once; for new people you get an invite link to send (works only for that email, expires in 14 days). The screens hide what a role can't do; the server enforces it.
 - **Live updates**: changes by teammates (or your other tabs) appear within a second, no refresh — the "● Live" dot in the top bar shows the connection. One server process (in-memory events); several processes would need Redis.
+- **Form view**: build a form (title, description, which fields, question labels, help text, required, order, button text, thank-you message) and share it with **Share form** — anyone with the link can answer at `/f/<token>` without an account, including uploading files. Each answer becomes a record. Link fields and calculated fields can't be on a public form. Submissions are rate-limited per visitor.
+- **Shared views**: any other view can be shared read-only (⋯ → Share view) at `/v/<token>` — only that view's visible fields, with its filters; images and files from visible attachment fields load through the link. Creators/owners can make a new link (the old one stops working) or turn it off.
 - **Record activity**: the record popup has **Comments** and **History** (who changed which field, from what to what, and when).
 
-Not yet: group-by in the grid, form view and public share links, automations, interfaces (dashboards), trash / restore of deleted records. Link fields can only be filtered by "is empty / is not empty" for now. These follow the phases in the plan.
+Not yet: group-by in the grid, automations, interfaces (dashboards), trash / restore of deleted records. Link fields can only be filtered by "is empty / is not empty" for now. These follow the phases in the plan.
 
 ## Requirements
 

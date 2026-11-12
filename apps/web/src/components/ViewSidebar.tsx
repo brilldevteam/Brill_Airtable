@@ -1,16 +1,17 @@
 import type { View, ViewType } from "@brill/shared";
-import { CalendarDays, Copy, Kanban, LayoutGrid, MoreHorizontal, Pencil, Plus, Search, Sheet, Trash2 } from "lucide-react";
+import { CalendarDays, ClipboardList, Copy, Kanban, LayoutGrid, MoreHorizontal, Pencil, Plus, Search, Sheet, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useDialogs } from "./Dialogs";
 import { Popover, anchorOf, type Anchor } from "./Popover";
 
-const VIEW_LABEL: Record<ViewType, string> = { grid: "Grid", kanban: "Kanban", calendar: "Calendar", gallery: "Gallery" };
+const VIEW_LABEL: Record<ViewType, string> = { grid: "Grid", kanban: "Kanban", calendar: "Calendar", gallery: "Gallery", form: "Form" };
 
 export function ViewIcon({ type, size = 16 }: { type: ViewType; size?: number }) {
   switch (type) {
     case "kanban": return <Kanban size={size} className="view-icon vi-kanban" />;
     case "calendar": return <CalendarDays size={size} className="view-icon vi-calendar" />;
     case "gallery": return <LayoutGrid size={size} className="view-icon vi-gallery" />;
+    case "form": return <ClipboardList size={size} className="view-icon vi-form" />;
     default: return <Sheet size={size} className="view-icon vi-grid" />;
   }
 }
@@ -80,7 +81,7 @@ export function ViewSidebar({ canEdit, views, currentId, onSelect, onCreate, onR
 
       {canEdit && <div className="view-create">
         <div className="sidebar-label" style={{ paddingBottom: 4 }}>Create</div>
-        {(["grid", "kanban", "calendar", "gallery"] as ViewType[]).map((t) => (
+        {(["grid", "kanban", "calendar", "gallery", "form"] as ViewType[]).map((t) => (
           <button key={t} className="view-name" onClick={() => create(t)}>
             <ViewIcon type={t} />
             {VIEW_LABEL[t]}
