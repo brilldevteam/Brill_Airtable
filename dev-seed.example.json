@@ -1,0 +1,11 @@
+{
+  "_comment": "Local development test accounts only (PGlite dev database). Not real credentials.",
+  "name": "Dev Tester",
+  "email": "dev@brill.test",
+  "password": "devpass-7Kq2xLm9",
+  "teammate": {
+    "name": "Tara Teammate",
+    "email": "teammate@brill.test",
+    "password": "teampass-4Rw8yZq1"
+  }
+}

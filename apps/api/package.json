@@ -1,0 +1,28 @@
+{
+  "name": "@brill/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@brill/shared": "workspace:*",
+    "@electric-sql/pglite": "0.2.17",
+    "@fastify/cookie": "11.0.2",
+    "@fastify/multipart": "9.0.3",
+    "@node-rs/argon2": "2.0.2",
+    "fastify": "5.2.1",
+    "sharp": "0.33.5",
+    "zod": "3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "tsx": "4.19.2",
+    "typescript": "5.6.3",
+    "vitest": "2.1.8"
+  }
+}

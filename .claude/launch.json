@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "api",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@brill/api", "dev"],
+      "port": 4000,
+      "url": "http://127.0.0.1:4000"
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@brill/web", "dev"],
+      "port": 5180
+    }
+  ]
+}

@@ -1,0 +1,84 @@
+# Brill Tables
+
+In-house replacement for Airtable. See [BUILD_PLAN.md](BUILD_PLAN.md) for the full plan.
+
+## Status: Phase 1 (foundation) — first working slice
+
+Works today:
+- Sign up / sign in (email + password, secure session cookie)
+- Workspaces → bases → tables → fields → records
+- Create, rename, delete bases and tables (double-click a tab to rename, right-click to delete)
+- Field types: single line text, long text, number (decimal places), checkbox, single select, multiple select, date (optional time), email, URL, phone
+- Add, edit, delete fields; changing a field's type converts existing values
+- Spreadsheet grid: inline editing, copy/paste, fill handle, frozen primary column, column resize, add/delete records, Delete key clears cells, search
+- Permission checks on every API call (owner / creator / editor / commenter / read)
+- **Views** (left sidebar): several saved views per table, each with its own settings; create, rename (double-click), duplicate, delete
+  - **Filter** with AND/OR conditions and type-aware operators (contains, is, =, <, is any of, has all of, is before/after, today/tomorrow…); runs on the server as SQL
+  - **Sort** by several fields (select fields sort in option order, empty values last)
+  - **Hide fields**, drag to **reorder columns**, **resize columns**, **row height** — all saved per view
+- **Kanban view**: cards stacked by a single select field, drag between stacks, add a card in a stack
+- **Calendar view**: month grid (weeks start Monday) placed by a date field (or date formula); drag events to reschedule (time of day is kept), click a day's + to add a record there, colour events by a single select, "+N more" for busy days, and a side panel of records without a date that you can drag onto the calendar.
+- **Gallery view**: cards with a cover from an attachment field (images, or the first frame of a video), crop or fit, small/medium/large cards, and the view's visible fields.
+- **Expand record**: click a Kanban card, or select one grid row → "Expand record", to edit every field in a form
+
+- **Linked records**: "Link to another record" fields between tables (or within one table). Linking from either side updates both sides; the other table gets a matching field automatically. Pick records with a searchable picker in the grid or the record form.
+- **Lookup** (show a field from linked records), **Rollup** (SUM, AVERAGE, MIN, MAX, COUNT, COUNTALL, ARRAYJOIN, unique join) and **Count** fields. They are calculated on the server and update automatically when linked data changes, including chains such as a lookup of a lookup. They can be filtered and sorted (rollups and counts as numbers).
+- Safety rules: you can't delete a field that lookups or rollups use, deleting a link field also deletes its other side, deleting a record removes it from all links, and calculated fields can't be typed into.
+
+- **Formula fields** with Airtable-style syntax (`{Qty} * {Price}`, `IF(...)`, `DATETIME_DIFF({Due}, TODAY(), 'days')`) and ~80 functions: logic, text (incl. regex), numbers, dates (DATEADD, DATETIME_DIFF, DATETIME_FORMAT, WORKDAY…), lists and record info. The editor checks the formula as you type and shows the result type. Formulas are stored by field id (renaming fields never breaks them), calculated on the server, recalculated when their inputs change (including lookups, rollups and other formulas), and filter/sort as their result type. Formulas using TODAY()/NOW() refresh once a day. Errors show as `#ERROR!` in text formulas and as empty in number/date formulas. The engine is in `packages/shared/src/formula`.
+
+- **Attachment fields** (Airtable-style): select a cell and press Enter (or double-click) for the strip with 📎 add, thumbnails and expand. The add dialog has **Local files** (drag-and-drop, progress bars), **Link (URL)** (the server downloads it, refusing private/local addresses) and **Webcam** (take a photo). Click a file for the full-screen **viewer**: images, videos (with seeking), audio and PDFs preview inline; ←/→ to move between files; rename, remove, download; and a **comments** panel per file. Thumbnails also show in the record form and as Kanban card covers. 25 MB per file. Files are stored on disk in `.data/files` (set `FILES_DIR` to change); risky file types (HTML, SVG…) are always downloaded, never opened in the browser.
+- **CSV import** (toolbar ⋯ → Import CSV): match columns to fields or create new ones (types are guessed), day-first or month-first dates, ₹/commas in numbers, yes/no checkboxes; new select options and linked records (matched by name) are created automatically. **CSV export** downloads the current view (its fields, filters and sorts).
+- **Batch API** `POST /api/tables/:id/records/batch` with `typecast` — the base for the Airtable migration tool.
+
+- **Team sharing** (Share button on a base): members and roles — Owner, Creator (builds tables/fields), Editor (edits records), Commenter, Read only. Inviting an existing user adds them at once; for new people you get an invite link to send (works only for that email, expires in 14 days). The screens hide what a role can't do; the server enforces it.
+- **Live updates**: changes by teammates (or your other tabs) appear within a second, no refresh — the "● Live" dot in the top bar shows the connection. One server process (in-memory events); several processes would need Redis.
+- **Record activity**: the record popup has **Comments** and **History** (who changed which field, from what to what, and when).
+
+Not yet: group-by in the grid, form view and public share links, automations, interfaces (dashboards), trash / restore of deleted records. Link fields can only be filtered by "is empty / is not empty" for now. These follow the phases in the plan.
+
+## Requirements
+
+- Node.js 22+
+- pnpm 11 (`npm install -g pnpm`)
+- **No Docker and no database install needed for development**: the API uses PGlite, a full PostgreSQL that runs inside Node and stores its data in `.data/pg`.
+
+## Run it
+
+```bash
+pnpm install
+```
+
+In two terminals:
+
+```bash
+pnpm dev:api
+```
+
+```bash
+pnpm dev:web
+```
+
+Open http://localhost:5180 and create an account.
+
+## Tests
+
+```bash
+pnpm test
+```
+
+```bash
+pnpm typecheck
+```
+
+## Layout
+
+```
+apps/api        Fastify API (auth, bases, tables, fields, records) + PGlite database
+apps/web        React + Vite frontend, Glide Data Grid for the spreadsheet
+packages/shared Field types, validation and value conversion shared by both
+```
+
+To reset the dev database, stop the API and delete the `.data` folder.
+
+`dev-seed.example.json` holds a local-only test account used during development.
