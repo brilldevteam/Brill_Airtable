@@ -5,6 +5,13 @@ import { useDialogs } from "./Dialogs";
 import { Popover, anchorOf, type Anchor } from "./Popover";
 
 const VIEW_LABEL: Record<ViewType, string> = { grid: "Grid", kanban: "Kanban", calendar: "Calendar", gallery: "Gallery", form: "Form" };
+const VIEW_HINT: Record<ViewType, string> = {
+  grid: "Spreadsheet rows",
+  kanban: "Cards by status",
+  calendar: "Records by date",
+  gallery: "Image cards",
+  form: "Collect responses",
+};
 
 export function ViewIcon({ type, size = 16 }: { type: ViewType; size?: number }) {
   switch (type) {
@@ -80,14 +87,19 @@ export function ViewSidebar({ canEdit, views, currentId, onSelect, onCreate, onR
       </div>
 
       {canEdit && <div className="view-create">
-        <div className="sidebar-label" style={{ paddingBottom: 4 }}>Create</div>
-        {(["grid", "kanban", "calendar", "gallery", "form"] as ViewType[]).map((t) => (
-          <button key={t} className="view-name" onClick={() => create(t)}>
-            <ViewIcon type={t} />
-            {VIEW_LABEL[t]}
-            <Plus size={15} className="plus" />
-          </button>
-        ))}
+        <div className="sidebar-label">Create a view</div>
+        <div className="vc-list">
+          {(["grid", "kanban", "calendar", "gallery", "form"] as ViewType[]).map((t) => (
+            <button key={t} className={"vc-btn vc-" + t} onClick={() => create(t)} title={`New ${VIEW_LABEL[t].toLowerCase()} view`}>
+              <span className="vc-chip"><ViewIcon type={t} size={15} /></span>
+              <span className="vc-text">
+                <b>{VIEW_LABEL[t]}</b>
+                <small>{VIEW_HINT[t]}</small>
+              </span>
+              <span className="vc-plus"><Plus size={14} /></span>
+            </button>
+          ))}
+        </div>
       </div>}
 
       {menu && (
