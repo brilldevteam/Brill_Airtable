@@ -31,6 +31,9 @@ The demo loader signs in as the local test account in `dev-seed.example.json` (o
 - **Sign up** with name, email and password (at least 10 characters; common passwords are refused). **Sign in** stays active while you use the app, ending after 30 days of inactivity and after 90 days in any case.
 - Too many wrong passwords lock that account's sign-in for 15 minutes.
 - **Account settings** (your initials, top right) let you change your name or password and sign out of your other devices. Changing your password signs out every other device automatically.
+- **Confirm your email:** after signing up you get an email with a confirmation link. Until you click it, a yellow banner on the home page reminds you, with **Resend email**. You need a confirmed email to join teams that invite you.
+- **Forgot password?** (on the sign-in screen) emails a link to choose a new password. It works once, within 1 hour, and signs you out everywhere else. The screen says the same thing whether or not the email has an account, so nobody can use it to find out who's a customer.
+- **In development no real email is sent.** Open http://localhost:5180/dev/mail to read every email the app would have sent, and follow its links. In production, set the email provider settings (see the README).
 
 ## 4. Home and bases
 
@@ -100,7 +103,7 @@ Select an attachment cell and press Enter to open the strip. **Add** offers **Lo
 | Commenter | Read and comment. |
 | Read only | Read. |
 
-  An existing user is added at once. A new person gets an invite link that works only for their email and expires in 14 days. The screens hide what your role can't do, and the server enforces it on every request.
+  Every invite is **emailed**, to existing users and new people alike. They join only when they click **Accept invite** while signed in with that email address, after confirming it, so nobody is added to a workspace without saying yes. The owner also sees the link, to send it another way if needed. It works only for that email and expires in 14 days. The screens hide what your role can't do, and the server enforces it on every request.
 - **Live updates**: teammates' changes appear within about a second, without a refresh. The green "● Live" dot shows the connection.
 
 ## 11. Public links
@@ -134,10 +137,10 @@ Browser (React + Vite)            API (Node + Fastify)                Storage
   - URL fetches are protected against SSRF.
   - Spreadsheet exports are protected against formula injection.
 - **Quality:**
-  - `pnpm test` runs 93 automated tests across API and engine.
+  - `pnpm test` runs 96 automated tests across API and engine.
   - `pnpm typecheck` checks types across the whole project.
   - `pnpm seed:demo` exercises the HTTP API end to end.
 
 ## 13. What isn't built yet
 
-Group-by in the grid, automations, interfaces (dashboards), trash and restore, undo, password reset by email, email verification, two-factor sign-in, record paging for very large tables, and production hosting. [SAAS_PLAN.md](../SAAS_PLAN.md) covers these and the move to a SaaS product.
+Group-by in the grid, automations, interfaces (dashboards), trash and restore, undo, Google sign-in, two-factor sign-in, record paging for very large tables, and production hosting. [SAAS_PLAN.md](../SAAS_PLAN.md) covers these and the move to a SaaS product.

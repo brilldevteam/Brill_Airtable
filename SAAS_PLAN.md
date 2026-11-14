@@ -50,7 +50,7 @@ What's missing is what a business needs to **sell, run and scale** it.
 5. **Paging.** Load records page by page, stream CSV exports, and cap rows on shared views.
 
 ### S2 — Accounts like a real product
-1. **Email.** Verify the address at sign-up, add password reset (single-use hashed tokens, 1-hour expiry), require every invite to be accepted (never auto-add), and give the same response whether or not an email exists.
+1. ✅ **Email (done).** Confirm the address at sign-up, password reset (single-use hashed tokens, 1-hour expiry), every invite emailed and accepted (never auto-added), same response whether or not an email exists. Dev outbox at `/dev/mail`; Resend in production.
 2. **Google sign-in** (OAuth), then **two-factor sign-in** (TOTP with recovery codes).
 3. **Profile and settings:** avatar, time zone, notification settings, and account deletion with a data export.
 
@@ -94,6 +94,6 @@ S1 to S3 together are the **minimum sellable product**.
 
 ## Decisions needed from Brill
 
-1. **Payments:** **Razorpay** (best for India: UPI, cards, GST invoices, INR) or **Stripe** (best for international customers). Both can be added later; pick the first.
+1. **Payments** (postponed — S3 is skipped for now): **Razorpay** (best for India: UPI, cards, GST invoices, INR) or **Stripe** (best for international customers). Both can be added later; pick the first.
 2. **Hosting:** recommended setup is Render (API) + Neon (Postgres) + Cloudflare R2 (files) + Cloudflare Pages (web) + Resend (email). All are managed, all run without Docker, and all have free or cheap tiers to start.
 3. **Product name and domain** for the public launch, and the final prices.

@@ -195,6 +195,19 @@ const MIGRATIONS: string[] = [
   CREATE INDEX IF NOT EXISTS bases_workspace_idx ON bases (workspace_id);
   CREATE INDEX IF NOT EXISTS tables_base_idx ON tables (base_id)
   `,
+  /* 008 email verification and password reset */ `
+  ALTER TABLE users ADD COLUMN email_verified_at TIMESTAMPTZ;
+  UPDATE users SET email_verified_at = now();
+  CREATE TABLE email_tokens (
+    token_hash TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('verify','reset')),
+    expires_at TIMESTAMPTZ NOT NULL,
+    used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+  CREATE INDEX email_tokens_user_idx ON email_tokens (user_id, kind)
+  `,
 ];
 
 async function migrate(db: Db) {

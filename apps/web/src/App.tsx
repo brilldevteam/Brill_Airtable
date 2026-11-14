@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { api } from "./api";
+import { DevMailPage, ResetPasswordPage, VerifyEmailPage } from "./pages/AccountPages";
 import { BasePage } from "./pages/BasePage";
 import { HomePage } from "./pages/HomePage";
 import { InvitePage } from "./pages/InvitePage";
@@ -11,11 +12,16 @@ import { PublicViewPage } from "./pages/PublicViewPage";
 export function App() {
   const { pathname } = useLocation();
   // Shared forms and views are public: no sign-in, no account lookup.
-  if (pathname.startsWith("/f/") || pathname.startsWith("/v/")) {
+  // So are the emailed account links and the dev mailbox.
+  if (/^\/(f|v|verify-email|reset-password|dev)\//.test(pathname)) {
     return (
       <Routes>
         <Route path="/f/:token" element={<PublicFormPage />} />
         <Route path="/v/:token" element={<PublicViewPage />} />
+        <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
+        <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
+        <Route path="/dev/mail" element={<DevMailPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
   }

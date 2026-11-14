@@ -4,6 +4,15 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "./app";
 import { openDb, type Db } from "./db";
+import { logMailer } from "./mail";
+
+const mailer = logMailer({ quiet: true });
+/** Follow the link in the latest email to this address (returns the token at the end of the link). */
+const lastLink = (to: string) => mailer.outbox!.find((m) => m.to === to && m.text.includes("/verify-email/"))!.text.match(/\/verify-email\/([\w-]+)/)![1];
+async function verify(email: string) {
+  const r = await app.inject({ method: "POST", url: "/api/auth/verify-email", payload: { token: lastLink(email) } });
+  expect(r.statusCode).toBe(200);
+}
 import { bus, type ChangeEvent } from "./realtime";
 
 let db: Db;
@@ -30,7 +39,7 @@ let viewId: string;
 
 beforeAll(async () => {
   db = await openDb("memory://");
-  app = buildApp(db, { filesDir: mkdtempSync(join(tmpdir(), "brill-collab-")) });
+  app = buildApp(db, { filesDir: mkdtempSync(join(tmpdir(), "brill-collab-")), mailer, appUrl: "https://app.example" });
   await app.ready();
   owner = await signUp("owner@brill.test", "Olivia Owner");
   wsId = (await owner.call("GET", "/api/workspaces")).body.workspaces[0].id;
@@ -45,10 +54,21 @@ afterAll(async () => {
 });
 
 describe("sharing", () => {
-  it("adds an existing user straight away with the chosen role", async () => {
+  it("invites an existing user by email; they join only after accepting with a confirmed email", async () => {
     const ed = await signUp("ed@brill.test", "Ed Editor");
     const r = await owner.call("POST", `/api/workspaces/${wsId}/invites`, { email: "ED@brill.test", role: "editor" });
-    expect(r.body.added.name).toBe("Ed Editor");
+    expect(r.body.invite.emailed).toBe(true);
+    const mail = mailer.outbox![0];
+    expect(mail).toMatchObject({ to: "ed@brill.test", subject: expect.stringContaining("Olivia Owner invited you") });
+    expect(mail.text).toContain(`https://app.example/invite/${r.body.invite.token}`);
+    // Not a member until they accept.
+    expect((await ed.call("GET", `/api/bases/${baseId}`)).code).toBe(404);
+    const early = await ed.call("POST", `/api/invites/${r.body.invite.token}/accept`, {});
+    expect(early.code).toBe(403);
+    expect(early.body.error).toContain("Confirm your email");
+    await verify("ed@brill.test");
+    expect((await ed.call("POST", `/api/invites/${r.body.invite.token}/accept`, {})).code).toBe(200);
+    expect((await owner.call("POST", `/api/workspaces/${wsId}/invites`, { email: "ed@brill.test", role: "read" })).code).toBe(409);
     const ws = (await ed.call("GET", "/api/workspaces")).body;
     expect(ws.bases.map((b: any) => b.id)).toContain(baseId);
     expect((await ed.call("GET", `/api/bases/${baseId}`)).body.role).toBe("editor");
@@ -68,6 +88,7 @@ describe("sharing", () => {
     expect((await wrong.call("POST", `/api/invites/${token}/accept`, {})).code).toBe(403);
 
     const newbie = await signUp("new@brill.test", "Nina New");
+    await verify("new@brill.test");
     expect((await newbie.call("POST", `/api/invites/${token}/accept`, {})).body.workspaceId).toBe(wsId);
     expect((await newbie.call("POST", `/api/invites/${token}/accept`, {})).code).toBe(410);
 

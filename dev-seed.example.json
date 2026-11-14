@@ -7,5 +7,11 @@
     "name": "Tara Teammate",
     "email": "teammate@brill.test",
     "password": "teampass-4Rw8yZq1"
+  },
+  "qa": {
+    "name": "Quinn QA",
+    "email": "qa@brill.test",
+    "password": "qa-pass-9Vt3wHs2",
+    "newPassword": "qa-reset-5Lm8pZr4"
   }
 }

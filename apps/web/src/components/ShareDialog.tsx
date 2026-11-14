@@ -27,7 +27,7 @@ export function ShareDialog({ wsId, workspaceName, onClose }: { wsId: string; wo
   const [role, setRole] = useState<Role>("editor");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [link, setLink] = useState<{ email: string; url: string } | null>(null);
+  const [link, setLink] = useState<{ email: string; url: string; emailed: boolean } | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -48,7 +48,7 @@ export function ShareDialog({ wsId, workspaceName, onClose }: { wsId: string; wo
     setLink(null);
     try {
       const r = await api.invite(wsId, email.trim(), role);
-      if (r.invite) setLink({ email: r.invite.email, url: window.location.origin + r.invite.path });
+      setLink({ email: r.invite.email, url: window.location.origin + r.invite.path, emailed: r.invite.emailed });
       setEmail("");
       await refresh();
     } catch (err) {
@@ -93,8 +93,11 @@ export function ShareDialog({ wsId, workspaceName, onClose }: { wsId: string; wo
 
         {link && (
           <div className="share-link">
-            <div className="share-link-head"><Link2 size={15} /> Send this link to <b>{link.email}</b></div>
-            <p className="muted small">They don't have an account yet. The link works only for this email and expires in 14 days.</p>
+            <div className="share-link-head"><Link2 size={15} /> {link.emailed ? <>Invite emailed to <b>{link.email}</b></> : <>Send this link to <b>{link.email}</b></>}</div>
+            <p className="muted small">
+              {link.emailed ? "They join once they accept. You can also send them this link another way. " : "We couldn't send the email, so copy the link and send it yourself. "}
+              It works only for this email and expires in 14 days.
+            </p>
             <div className="share-link-row">
               <input readOnly value={link.url} onFocus={(e) => e.target.select()} />
               <button className="btn" onClick={copy}>{copied ? <><Check size={15} /> Copied</> : <><Copy size={15} /> Copy</>}</button>

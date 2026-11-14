@@ -4,13 +4,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildApp } from "./app";
 import { openDb, type Db } from "./db";
+import { logMailer } from "./mail";
+
+const mailer = logMailer({ quiet: true });
+const tokenIn = (to: string, path: string) => {
+  const m = mailer.outbox!.find((e) => e.to === to && e.text.includes(path));
+  return m ? m.text.split(path)[1].split(/\s/)[0] : null;
+};
 
 let db: Db;
 let app: ReturnType<typeof buildApp>;
 
 beforeAll(async () => {
   db = await openDb("memory://");
-  app = buildApp(db, { filesDir: mkdtempSync(join(tmpdir(), "brill-test-")) });
+  app = buildApp(db, { filesDir: mkdtempSync(join(tmpdir(), "brill-test-")), mailer, appUrl: "https://app.example", devMail: true });
   await app.ready();
 });
 afterAll(async () => {
@@ -81,5 +88,50 @@ describe("auth hardening", () => {
     expect(r.headers["x-frame-options"]).toBe("DENY");
     expect(r.headers["x-request-id"]).toBeTruthy();
     expect(r.headers["cache-control"]).toBe("no-store");
+  });
+
+  it("emails a confirmation link at sign-up; the link confirms once", async () => {
+    const r = await register("verify@brill.test");
+    expect(r.json().user.emailVerified).toBe(false);
+    const s = sid(r);
+    const token = tokenIn("verify@brill.test", "https://app.example/verify-email/")!;
+    expect(token).toBeTruthy();
+    const me = () => app.inject({ method: "GET", url: "/api/auth/me", cookies: { brill_sid: s } });
+    expect((await me()).json().user.emailVerified).toBe(false);
+    const ok = await app.inject({ method: "POST", url: "/api/auth/verify-email", payload: { token } });
+    expect(ok.json()).toEqual({ ok: true, email: "verify@brill.test" });
+    expect((await me()).json().user.emailVerified).toBe(true);
+    expect((await app.inject({ method: "POST", url: "/api/auth/verify-email", payload: { token } })).statusCode).toBe(410);
+    expect((await app.inject({ method: "POST", url: "/api/auth/verify-email", payload: { token: "x".repeat(40) } })).statusCode).toBe(400);
+    // The dev outbox is readable when enabled.
+    expect((await app.inject({ method: "GET", url: "/api/dev/mail" })).json().emails.length).toBeGreaterThan(0);
+  });
+
+  it("resets a forgotten password by email without revealing who has an account", async () => {
+    await register("forgot@brill.test");
+    const other = sid(await login("forgot@brill.test", "test-pass-2026"));
+    const ask = (email: string) => app.inject({ method: "POST", url: "/api/auth/forgot-password", payload: { email } });
+    const a = await ask("forgot@brill.test");
+    const b = await ask("nobody@brill.test");
+    expect(a.statusCode).toBe(200);
+    expect(b.json()).toEqual(a.json());
+    expect(tokenIn("nobody@brill.test", "/reset-password/")).toBeNull();
+    const token = tokenIn("forgot@brill.test", "https://app.example/reset-password/")!;
+
+    const weak = await app.inject({ method: "POST", url: "/api/auth/reset-password", payload: { token, password: "short" } });
+    expect(weak.statusCode).toBe(400);
+    const r = await app.inject({ method: "POST", url: "/api/auth/reset-password", payload: { token, password: "brand-new-pass-1" } });
+    expect(r.statusCode).toBe(200);
+    expect(r.json().user.emailVerified).toBe(true);
+    // Old sessions are gone, the new password works, the link can't be reused.
+    expect((await app.inject({ method: "GET", url: "/api/auth/me", cookies: { brill_sid: other } })).json().user).toBeNull();
+    expect((await login("forgot@brill.test", "brand-new-pass-1")).statusCode).toBe(200);
+    expect((await app.inject({ method: "POST", url: "/api/auth/reset-password", payload: { token, password: "another-pass-22" } })).statusCode).toBe(410);
+  });
+
+  it("limits how many reset emails one address gets", async () => {
+    const codes = [];
+    for (let i = 0; i < 4; i++) codes.push((await app.inject({ method: "POST", url: "/api/auth/forgot-password", payload: { email: "spam@brill.test" } })).statusCode);
+    expect(codes).toEqual([200, 200, 200, 429]);
   });
 });

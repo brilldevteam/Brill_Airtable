@@ -7,6 +7,7 @@ import { api } from "../api";
 import { AppBar } from "../components/AppBar";
 import { useDialogs } from "../components/Dialogs";
 import { BASE_COLORS } from "../colors";
+import { VerifyBanner } from "./AccountPages";
 
 function greeting() {
   const h = new Date().getHours();
@@ -47,6 +48,7 @@ export function HomePage({ user }: { user: User }) {
     <div className="home">
       <AppBar />
       <main className="home-main">
+        {user.emailVerified === false && <VerifyBanner email={user.email} />}
         <div className="home-hero">
           <div>
             <h1>{greeting()}, {firstName}</h1>

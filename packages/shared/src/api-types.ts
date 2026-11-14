@@ -1,7 +1,13 @@
 import type { CellValue, Field, LinkLabels } from "./fields";
 import type { View } from "./views";
 
-export interface User { id: string; email: string; name: string }
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  /** Has the user confirmed their email address? (Only sent for the signed-in user.) */
+  emailVerified?: boolean;
+}
 export interface Base { id: string; workspaceId: string; name: string; color: string }
 export interface Table { id: string; baseId: string; name: string; primaryFieldId: string | null; position: number }
 export interface RecordRow {

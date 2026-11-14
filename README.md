@@ -7,6 +7,7 @@ In-house replacement for Airtable. See [docs/GUIDE.md](docs/GUIDE.md) for how ev
 Works today:
 - Sign up / sign in (email + password; hashed session ids with 30-day idle / 90-day absolute expiry; sign-in rate limits and account lockout; common passwords refused)
 - Account settings: change name or password (signs out other devices), sign out of other devices
+- **Emails**: confirm your address at sign-up (banner + "Resend email" until you do), **forgot password** (link valid 1 hour, once; signs out every device; never reveals whether an account exists), and **invite emails**. In development the API doesn't send anything: open **http://localhost:5180/dev/mail** to see every email and click its links. For real email set `MAIL_PROVIDER=resend`, `RESEND_API_KEY` and `MAIL_FROM`, and `APP_URL` to the app's public address.
 - Workspaces → bases → tables → fields → records
 - Create, rename, delete bases and tables (double-click a tab to rename, right-click to delete)
 - Field types: single line text, long text, number (decimal places), checkbox, single select, multiple select, date (optional time), email, URL, phone
@@ -32,7 +33,7 @@ Works today:
 - **CSV import** (toolbar ⋯ → Import CSV): match columns to fields or create new ones (types are guessed), day-first or month-first dates, ₹/commas in numbers, yes/no checkboxes; new select options and linked records (matched by name) are created automatically. **CSV export** downloads the current view (its fields, filters and sorts).
 - **Batch API** `POST /api/tables/:id/records/batch` with `typecast` — the base for the Airtable migration tool.
 
-- **Team sharing** (Share button on a base): members and roles — Owner, Creator (builds tables/fields), Editor (edits records), Commenter, Read only. Inviting an existing user adds them at once; for new people you get an invite link to send (works only for that email, expires in 14 days). The screens hide what a role can't do; the server enforces it.
+- **Team sharing** (Share button on a base): members and roles — Owner, Creator (builds tables/fields), Editor (edits records), Commenter, Read only. Every invite is emailed and must be accepted by someone signed in with that email, after confirming it — nobody is added without saying yes. The owner also gets the link to send another way (works only for that email, expires in 14 days). The screens hide what a role can't do; the server enforces it.
 - **Live updates**: changes by teammates (or your other tabs) appear within a second, no refresh — the "● Live" dot in the top bar shows the connection. One server process (in-memory events); several processes would need Redis.
 - **Form view**: build a form (title, description, which fields, question labels, help text, required, order, button text, thank-you message) and share it with **Share form** — anyone with the link can answer at `/f/<token>` without an account, including uploading files. Each answer becomes a record. Link fields and calculated fields can't be on a public form. Submissions are rate-limited per visitor.
 - **Shared views**: any other view can be shared read-only (⋯ → Share view) at `/v/<token>` — only that view's visible fields, with its filters; images and files from visible attachment fields load through the link. Creators/owners can make a new link (the old one stops working) or turn it off.
@@ -70,7 +71,7 @@ To load a realistic demo base (clients, projects, tasks, invoices — every fiel
 pnpm seed:demo
 ```
 
-Production settings (environment variables for the API): `PORT`, `HOST` (default 127.0.0.1), `DATA_DIR`, `FILES_DIR`, `NODE_ENV=production` (secure cookies + HSTS), `SECURE_COOKIES`, `TRUST_PROXY` (behind nginx/Caddy/a load balancer). `GET /api/health` checks the database.
+Production settings (environment variables for the API): `PORT`, `HOST` (default 127.0.0.1), `DATA_DIR`, `FILES_DIR`, `NODE_ENV=production` (secure cookies + HSTS), `SECURE_COOKIES`, `TRUST_PROXY` (behind nginx/Caddy/a load balancer), `APP_URL` (used in email links), `MAIL_PROVIDER` / `RESEND_API_KEY` / `MAIL_FROM`. `GET /api/health` checks the database.
 
 ## Tests
 

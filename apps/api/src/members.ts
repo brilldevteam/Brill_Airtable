@@ -6,24 +6,27 @@ import { workspaceAccess, type Role } from "./access";
 import { requireUser } from "./auth";
 import type { Db } from "./db";
 import { HttpError } from "./errors";
+import { emails, type Mailer } from "./mail";
 
 /**
  * Workspace members and invitations.
  *
- * There's no email server, so inviting someone who doesn't have an account yet creates an
- * invite link the owner copies and sends. The link only works for the invited email address,
- * expires after 14 days, and is stored hashed (only the person holding the link knows it).
+ * Every invite — to new and existing users alike — is emailed as a link and must be accepted
+ * by someone signed in with that (confirmed) email address. Nobody is added to a workspace
+ * without saying yes. The link expires after 14 days and is stored hashed. The owner also
+ * gets the link back once, to send another way if email doesn't arrive.
  */
 
 const ROLES = ["owner", "creator", "editor", "commenter", "read"] as const;
 const INVITE_DAYS = 14;
+const ROLE_LABEL: Record<Role, string> = { owner: "an owner", creator: "a creator", editor: "an editor", commenter: "a commenter", read: "a read-only member" };
 const hashToken = (t: string) => createHash("sha256").update(t).digest("hex");
 
 async function ownerCount(db: Db, wsId: string) {
   return (await db.one<{ n: number }>(`SELECT COUNT(*)::int AS n FROM workspace_members WHERE workspace_id=$1 AND role='owner'`, [wsId]))!.n;
 }
 
-export function registerMembers(app: FastifyInstance, db: Db) {
+export function registerMembers(app: FastifyInstance, db: Db, opts: { mailer: Mailer; appUrl: string }) {
   /** Members and pending invites. Anyone in the workspace can see who else is in it. */
   app.get("/api/workspaces/:wsId/members", async (req) => {
     const user = requireUser(req);
@@ -45,10 +48,7 @@ export function registerMembers(app: FastifyInstance, db: Db) {
     return { members, invites, myRole: me?.role };
   });
 
-  /**
-   * Invite by email. Existing users are added straight away; otherwise an invite link is returned
-   * (shown once — only its hash is stored).
-   */
+  /** Invite by email: emails the link, and returns it once (only its hash is stored). */
   app.post("/api/workspaces/:wsId/invites", async (req) => {
     const user = requireUser(req);
     const { wsId } = req.params as { wsId: string };
@@ -57,13 +57,11 @@ export function registerMembers(app: FastifyInstance, db: Db) {
       .parse(req.body);
     await workspaceAccess(db, user.id, wsId, "owner");
 
-    const existing = await db.one<{ id: string; name: string }>(`SELECT id, name FROM users WHERE email=$1`, [body.email]);
-    if (existing) {
-      const already = await db.one(`SELECT role FROM workspace_members WHERE workspace_id=$1 AND user_id=$2`, [wsId, existing.id]);
-      if (already) throw new HttpError(409, `${existing.name} is already in this workspace`);
-      await db.query(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ($1,$2,$3)`, [wsId, existing.id, body.role]);
-      return { added: { userId: existing.id, name: existing.name, email: body.email, role: body.role } };
-    }
+    const already = await db.one(
+      `SELECT 1 FROM workspace_members m JOIN users u ON u.id = m.user_id WHERE m.workspace_id=$1 AND u.email=$2`,
+      [wsId, body.email],
+    );
+    if (already) throw new HttpError(409, `${body.email} is already in this workspace`);
     // Replace any older pending invite for the same email.
     await db.query(`DELETE FROM workspace_invites WHERE workspace_id=$1 AND email=$2 AND accepted_at IS NULL`, [wsId, body.email]);
     const token = randomBytes(24).toString("base64url");
@@ -73,7 +71,15 @@ export function registerMembers(app: FastifyInstance, db: Db) {
        VALUES ($1,$2,$3,$4,$5,$6, now() + interval '${INVITE_DAYS} days')`,
       [id, wsId, body.email, body.role, hashToken(token), user.id],
     );
-    return { invite: { id, email: body.email, role: body.role, token, path: `/invite/${token}` } };
+    const ws = await db.one<{ name: string }>(`SELECT name FROM workspaces WHERE id=$1`, [wsId]);
+    let emailed = true;
+    try {
+      await opts.mailer.send(emails.invite(body.email, user.name, ws!.name, ROLE_LABEL[body.role], `${opts.appUrl}/invite/${token}`));
+    } catch (e) {
+      emailed = false;
+      req.log.error(e, "invite email failed");
+    }
+    return { invite: { id, email: body.email, role: body.role, token, path: `/invite/${token}`, emailed } };
   });
 
   app.delete("/api/workspaces/:wsId/invites/:inviteId", async (req) => {
@@ -137,6 +143,9 @@ export function registerMembers(app: FastifyInstance, db: Db) {
       if (new Date(inv.expires_at) < new Date()) throw new HttpError(410, "This invite has expired — ask for a new one");
       if (inv.email !== user.email.toLowerCase()) {
         throw new HttpError(403, `This invite is for ${inv.email}. Sign in with that email to accept it.`);
+      }
+      if (!user.emailVerified) {
+        throw new HttpError(403, `Confirm your email address first — we sent a link to ${user.email}.`);
       }
       await t.query(
         `INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ($1,$2,$3) ON CONFLICT (workspace_id, user_id) DO NOTHING`,

@@ -5,6 +5,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import type { Db } from "./db";
 import { HttpError } from "./errors";
+import { emails, type Mailer } from "./mail";
 import { limiter } from "./rateLimit";
 
 const SESSION_COOKIE = "brill_sid";
@@ -42,11 +43,46 @@ const registerBody = z.object({
 });
 const loginBody = z.object({ email: z.string().trim().toLowerCase().max(254), password: z.string().max(200) });
 
-export function registerAuth(app: FastifyInstance, db: Db, opts: { secureCookies: boolean }) {
+const VERIFY_HOURS = 24;
+const RESET_MINUTES = 60;
+export const hashToken = (t: string) => createHash("sha256").update(t).digest("base64url");
+
+export function registerAuth(app: FastifyInstance, db: Db, opts: { secureCookies: boolean; mailer: Mailer; appUrl: string }) {
   // Brute-force protection: per address and per account.
   const loginByIp = limiter(30, 15 * 60_000);
   const loginByEmail = limiter(10, 15 * 60_000, "Too many sign-in attempts for this account — wait 15 minutes and try again");
   const registerByIp = limiter(20, 60 * 60_000);
+  const mailByIp = limiter(10, 60 * 60_000, "Too many emails requested — please wait a while and try again");
+  const mailByEmail = limiter(3, 15 * 60_000, "We've just sent an email to this address — check your inbox (and spam), or wait 15 minutes");
+
+  /** Create a single-use token (only its hash is stored), replacing older unused ones of the same kind. */
+  async function issueToken(userId: string, kind: "verify" | "reset", ms: number) {
+    const token = randomBytes(32).toString("base64url");
+    await db.query(`DELETE FROM email_tokens WHERE user_id=$1 AND kind=$2 AND used_at IS NULL`, [userId, kind]);
+    await db.query(`INSERT INTO email_tokens (token_hash, user_id, kind, expires_at) VALUES ($1,$2,$3,$4)`, [
+      hashToken(token), userId, kind, new Date(Date.now() + ms),
+    ]);
+    return token;
+  }
+  /** Use up a token: returns the user id, or throws if it's unknown, used or expired. */
+  async function consumeToken(t: Db, token: string, kind: "verify" | "reset") {
+    const row = await t.one<{ user_id: string; expires_at: string; used_at: string | null }>(
+      `SELECT user_id, expires_at, used_at FROM email_tokens WHERE token_hash=$1 AND kind=$2 FOR UPDATE`,
+      [hashToken(token), kind],
+    );
+    const what = kind === "verify" ? "confirmation" : "reset";
+    if (!row) throw new HttpError(400, `This ${what} link isn't valid. Ask for a new one.`);
+    if (row.used_at) throw new HttpError(410, `This ${what} link has already been used.`);
+    if (new Date(row.expires_at) < new Date()) throw new HttpError(410, `This ${what} link has expired. Ask for a new one.`);
+    await t.query(`UPDATE email_tokens SET used_at=now() WHERE token_hash=$1`, [hashToken(token)]);
+    return row.user_id;
+  }
+  async function sendVerification(user: User) {
+    const token = await issueToken(user.id, "verify", VERIFY_HOURS * 3600_000);
+    await opts.mailer.send(emails.verify(user.email, user.name, `${opts.appUrl}/verify-email/${token}`));
+  }
+  /** Email failures shouldn't break sign-up; they're logged and the user can ask again. */
+  const trySend = (req: FastifyRequest, p: Promise<void>) => p.catch((e) => req.log.error(e, "email failed"));
 
   async function startSession(reply: FastifyReply, userId: string) {
     const sid = randomBytes(32).toString("base64url");
@@ -67,13 +103,13 @@ export function registerAuth(app: FastifyInstance, db: Db, opts: { secureCookies
     const sid = req.cookies[SESSION_COOKIE];
     if (!sid) return;
     const h = hashSid(sid);
-    const row = await db.one<User & { last_seen_at: string; absolute_expires_at: string }>(
-      `SELECT u.id, u.email, u.name, s.last_seen_at, s.absolute_expires_at FROM sessions s JOIN users u ON u.id = s.user_id
+    const row = await db.one<User & { last_seen_at: string; absolute_expires_at: string; verified: boolean }>(
+      `SELECT u.id, u.email, u.name, u.email_verified_at IS NOT NULL AS verified, s.last_seen_at, s.absolute_expires_at FROM sessions s JOIN users u ON u.id = s.user_id
        WHERE s.id = $1 AND s.expires_at > now() AND s.absolute_expires_at > now()`,
       [h],
     );
     if (!row) return;
-    req.user = { id: row.id, email: row.email, name: row.name };
+    req.user = { id: row.id, email: row.email, name: row.name, emailVerified: row.verified };
     req.sessionHash = h;
     if (Date.now() - new Date(row.last_seen_at).getTime() > TOUCH_MS) {
       const abs = new Date(row.absolute_expires_at).getTime();
@@ -100,7 +136,8 @@ export function registerAuth(app: FastifyInstance, db: Db, opts: { secureCookies
       await t.query(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ($1,$2,'owner')`, [wsId, user.id]);
     });
     await startSession(reply, user.id);
-    return { user };
+    await trySend(req, sendVerification(user));
+    return { user: { ...user, emailVerified: false } };
   });
 
   app.post("/api/auth/login", async (req, reply) => {
@@ -126,6 +163,62 @@ export function registerAuth(app: FastifyInstance, db: Db, opts: { secureCookies
   });
 
   app.get("/api/auth/me", async (req) => ({ user: req.user ?? null }));
+
+  // ---------------- email verification ----------------
+  app.post("/api/auth/verify-email", async (req) => {
+    const { token } = z.object({ token: z.string().min(10).max(200) }).parse(req.body);
+    const email = await db.tx(async (t) => {
+      const userId = await consumeToken(t, token, "verify");
+      const u = await t.one<{ email: string }>(
+        `UPDATE users SET email_verified_at = COALESCE(email_verified_at, now()) WHERE id=$1 RETURNING email`, [userId],
+      );
+      return u!.email;
+    });
+    return { ok: true, email };
+  });
+
+  app.post("/api/auth/resend-verification", async (req) => {
+    const user = requireUser(req);
+    if (user.emailVerified) return { ok: true, alreadyVerified: true };
+    mailByIp(req.ip);
+    mailByEmail(user.email);
+    await sendVerification(user);
+    return { ok: true };
+  });
+
+  // ---------------- forgotten password ----------------
+  /** Always answers the same way, so it can't be used to find out who has an account. */
+  app.post("/api/auth/forgot-password", async (req) => {
+    const { email } = z.object({ email: z.string().trim().toLowerCase().email().max(254) }).parse(req.body);
+    mailByIp(req.ip);
+    mailByEmail(email);
+    const user = await db.one<User>(`SELECT id, email, name FROM users WHERE email=$1`, [email]);
+    if (user) {
+      const token = await issueToken(user.id, "reset", RESET_MINUTES * 60_000);
+      await trySend(req, opts.mailer.send(emails.reset(user.email, user.name, `${opts.appUrl}/reset-password/${token}`)));
+    }
+    return { ok: true };
+  });
+
+  /** Set a new password from an emailed link. Signs out every device, then signs in here. */
+  app.post("/api/auth/reset-password", async (req, reply) => {
+    const body = z.object({ token: z.string().min(10).max(200), password: passwordSchema }).parse(req.body);
+    loginByIp(req.ip);
+    const passwordHash = await hash(body.password);
+    const user = await db.tx(async (t) => {
+      const userId = await consumeToken(t, body.token, "reset");
+      // Following the emailed link proves they own the address.
+      const u = await t.one<User>(
+        `UPDATE users SET password_hash=$2, email_verified_at = COALESCE(email_verified_at, now()) WHERE id=$1 RETURNING id, email, name`,
+        [userId, passwordHash],
+      );
+      await t.query(`DELETE FROM sessions WHERE user_id=$1`, [userId]);
+      return u!;
+    });
+    loginByEmail.reset(user.email);
+    await startSession(reply, user.id);
+    return { user: { ...user, emailVerified: true } };
+  });
 
   // ---------------- account settings ----------------
   app.patch("/api/auth/me", async (req) => {

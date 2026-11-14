@@ -5,6 +5,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { AppBar } from "../components/AppBar";
 import { ROLE_INFO } from "../components/ShareDialog";
+import { VerifyBanner } from "./AccountPages";
 
 /** Accept a workspace invite (the user is signed in by now). */
 export function InvitePage() {
@@ -14,7 +15,7 @@ export function InvitePage() {
   const info = useQuery({ queryKey: ["invite", token], queryFn: () => api.inviteInfo(token!), retry: false });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const me = qc.getQueryData<{ user: { email: string } | null }>(["me"])?.user;
+  const me = qc.getQueryData<{ user: { email: string; emailVerified?: boolean } | null }>(["me"])?.user;
 
   const accept = async () => {
     setBusy(true);
@@ -52,6 +53,9 @@ export function InvitePage() {
               </p>
               {me && me.email.toLowerCase() !== info.data.email && (
                 <div className="hint">You're signed in as {me.email}. Sign out and sign in as {info.data.email} to accept.</div>
+              )}
+              {me && me.email.toLowerCase() === info.data.email && me.emailVerified === false && (
+                <VerifyBanner email={me.email} />
               )}
               {error && <div className="error banner" style={{ margin: 0 }}>{error}</div>}
               <button className="btn primary lg" onClick={accept} disabled={busy}>

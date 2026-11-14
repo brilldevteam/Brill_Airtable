@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { buildApp } from "./app";
 import { openDb } from "./db";
+import { mailerFromEnv } from "./mail";
 
 const env = process.env;
 const PORT = Number(env.PORT ?? 4000);
@@ -17,8 +18,16 @@ const TRUST_PROXY = !env.TRUST_PROXY ? false
   : env.TRUST_PROXY;
 const SECURE_COOKIES = env.SECURE_COOKIES ? env.SECURE_COOKIES === "true" : PRODUCTION;
 
+/** Public address of the web app, used in links inside emails. */
+const APP_URL = env.APP_URL ?? "http://localhost:5180";
+if (!APP_URL.startsWith("http://") && !APP_URL.startsWith("https://")) throw new Error(`APP_URL must start with http:// or https://, got "${APP_URL}"`);
+const mailer = mailerFromEnv(env);
+
 const db = await openDb(DATA_DIR);
-const app = buildApp(db, { logger: true, secureCookies: SECURE_COOKIES, filesDir: FILES_DIR, trustProxy: TRUST_PROXY });
+const app = buildApp(db, {
+  logger: true, secureCookies: SECURE_COOKIES, filesDir: FILES_DIR, trustProxy: TRUST_PROXY,
+  mailer, appUrl: APP_URL, devMail: !PRODUCTION && !!mailer.outbox,
+});
 
 let closing = false;
 for (const sig of ["SIGINT", "SIGTERM"] as const) {

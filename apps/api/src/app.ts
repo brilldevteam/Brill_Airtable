@@ -4,6 +4,7 @@ import Fastify from "fastify";
 import { randomUUID } from "node:crypto";
 import { ZodError } from "zod";
 import { registerAuth } from "./auth";
+import { logMailer, type Mailer } from "./mail";
 import type { Db } from "./db";
 import { HttpError } from "./errors";
 import { MAX_FILE_BYTES, registerFiles } from "./files";
@@ -21,9 +22,17 @@ export interface AppOptions {
   filesDir: string;
   /** Trust X-Forwarded-For from a reverse proxy (true, a hop count, or a list of proxy IPs). */
   trustProxy?: boolean | number | string;
+  /** Outgoing email. Defaults to a quiet in-memory outbox (tests). */
+  mailer?: Mailer;
+  /** Public address of the web app, used in email links. */
+  appUrl?: string;
+  /** Expose the dev outbox at GET /api/dev/mail (never in production). */
+  devMail?: boolean;
 }
 
 export function buildApp(db: Db, opts: AppOptions) {
+  const mailer = opts.mailer ?? logMailer({ quiet: true });
+  const appUrl = (opts.appUrl ?? "http://localhost:5180").replace(/\/+$/, "");
   const app = Fastify({
     logger: opts.logger ?? false,
     bodyLimit: 10 * 1024 * 1024,
@@ -78,15 +87,19 @@ export function buildApp(db: Db, opts: AppOptions) {
   });
 
   app.after(() => {
-    registerAuth(app, db, { secureCookies: opts.secureCookies ?? false });
+    registerAuth(app, db, { secureCookies: opts.secureCookies ?? false, mailer, appUrl });
     registerRealtime(app, db);
     registerRoutes(app, db);
     const files = registerFiles(app, db, opts.filesDir);
     registerImportExport(app, db);
-    registerMembers(app, db);
+    registerMembers(app, db, { mailer, appUrl });
     registerActivity(app, db);
     registerShare(app, db, files);
   });
+  if (opts.devMail && mailer.outbox) {
+    const outbox = mailer.outbox;
+    app.get("/api/dev/mail", async () => ({ emails: outbox }));
+  }
   app.get("/api/health", async (_req, reply) => {
     try {
       await db.query(`SELECT 1`);

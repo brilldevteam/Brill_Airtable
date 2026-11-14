@@ -27,6 +27,7 @@ async function call<T>(method: string, url: string, body?: unknown): Promise<T> 
   return data as T;
 }
 
+export interface DevEmail { id: number; to: string; subject: string; text: string; html: string; sentAt: string }
 export type Role = "owner" | "creator" | "editor" | "commenter" | "read";
 export interface Workspace { id: string; name: string; role: Role }
 export interface Member { userId: string; name: string; email: string; role: Role }
@@ -78,6 +79,11 @@ export const api = {
   changePassword: (currentPassword: string, newPassword: string) => call("POST", "/api/auth/password", { currentPassword, newPassword }),
   sessions: () => call<{ active: number }>("GET", "/api/auth/sessions"),
   revokeOtherSessions: () => call("POST", "/api/auth/sessions/revoke-others", {}),
+  verifyEmail: (token: string) => call<{ ok: true; email: string }>("POST", "/api/auth/verify-email", { token }),
+  resendVerification: () => call<{ ok: true; alreadyVerified?: boolean }>("POST", "/api/auth/resend-verification", {}),
+  forgotPassword: (email: string) => call<{ ok: true }>("POST", "/api/auth/forgot-password", { email }),
+  resetPassword: (token: string, password: string) => call<{ user: User }>("POST", "/api/auth/reset-password", { token, password }),
+  devMail: () => call<{ emails: DevEmail[] }>("GET", "/api/dev/mail"),
 
   workspaces: () => call<{ workspaces: Workspace[]; bases: Base[] }>("GET", "/api/workspaces"),
   createBase: (wsId: string, name: string, color: string) =>
@@ -89,7 +95,7 @@ export const api = {
 
   members: (wsId: string) => call<{ members: Member[]; invites: PendingInvite[]; myRole: Role }>("GET", `/api/workspaces/${wsId}/members`),
   invite: (wsId: string, email: string, role: Role) =>
-    call<{ added?: Member; invite?: { id: string; email: string; role: Role; token: string; path: string } }>(
+    call<{ invite: { id: string; email: string; role: Role; token: string; path: string; emailed: boolean } }>(
       "POST", `/api/workspaces/${wsId}/invites`, { email, role }),
   cancelInvite: (wsId: string, inviteId: string) => call("DELETE", `/api/workspaces/${wsId}/invites/${inviteId}`),
   setMemberRole: (wsId: string, userId: string, role: Role) => call("PATCH", `/api/workspaces/${wsId}/members/${userId}`, { role }),

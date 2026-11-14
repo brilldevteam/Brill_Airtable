@@ -136,7 +136,9 @@ describe("form views", () => {
     const r = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email: "e@brill.test", name: "Ed", password: "test-pass-2026" } });
     const ed = r.cookies.find((c) => c.name === "brill_sid")!.value;
     const ws = (await call("GET", "/api/workspaces")).body.workspaces[0].id;
-    await call("POST", `/api/workspaces/${ws}/invites`, { email: "e@brill.test", role: "editor" });
+    const inv = (await call("POST", `/api/workspaces/${ws}/invites`, { email: "e@brill.test", role: "editor" })).body.invite;
+    await db.query(`UPDATE users SET email_verified_at=now() WHERE email='e@brill.test'`);
+    expect((await call("POST", `/api/invites/${inv.token}/accept`, {}, ed)).code).toBe(200);
     expect((await call("POST", `/api/views/${viewId}/share`, {}, ed)).code).toBe(403);
   });
 });
