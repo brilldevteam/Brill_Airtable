@@ -1,9 +1,10 @@
 import type { User } from "@brill/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { LayoutGrid, LogOut } from "lucide-react";
+import { LayoutGrid, LogOut, Settings } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { AccountDialog } from "./AccountDialog";
 import { Popover, anchorOf, type Anchor } from "./Popover";
 
 export function initials(name: string) {
@@ -25,6 +26,7 @@ export function AppBar({ children }: { children?: ReactNode }) {
   const user = me.data?.user as User | undefined;
   const qc = useQueryClient();
   const [menu, setMenu] = useState<Anchor | null>(null);
+  const [account, setAccount] = useState(false);
 
   return (
     <header className="appbar">
@@ -47,6 +49,9 @@ export function AppBar({ children }: { children?: ReactNode }) {
               <span>{user.email}</span>
             </div>
             <hr />
+            <button onClick={() => { setMenu(null); setAccount(true); }}>
+              <Settings size={16} /> Account settings
+            </button>
             <button
               onClick={async () => {
                 setMenu(null);
@@ -60,6 +65,7 @@ export function AppBar({ children }: { children?: ReactNode }) {
           </div>
         </Popover>
       )}
+      {account && user && <AccountDialog user={user} onClose={() => setAccount(false)} />}
     </header>
   );
 }

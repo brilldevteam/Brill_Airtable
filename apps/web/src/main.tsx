@@ -9,10 +9,15 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { App } from "./App";
 import { DialogProvider } from "./components/Dialogs";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./styles.css";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } },
+});
+
+window.addEventListener("brill:signed-out", () => {
+  void queryClient.invalidateQueries({ queryKey: ["me"] });
 });
 
 createRoot(document.getElementById("root")!).render(
@@ -20,7 +25,9 @@ createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <DialogProvider>
-          <App />
+          <ErrorBoundary>
+            <App />
+          </ErrorBoundary>
         </DialogProvider>
       </BrowserRouter>
     </QueryClientProvider>

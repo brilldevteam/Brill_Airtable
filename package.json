@@ -9,6 +9,7 @@
     "dev:web": "pnpm --filter @brill/web dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "seed:demo": "pnpm --filter @brill/api seed:demo"
   }
 }

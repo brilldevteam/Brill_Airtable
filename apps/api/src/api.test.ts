@@ -19,7 +19,7 @@ afterAll(async () => {
 });
 
 async function signUp(email: string) {
-  const res = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email, name: "Test", password: "password123" } });
+  const res = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email, name: "Test", password: "test-pass-2026" } });
   expect(res.statusCode).toBe(200);
   const cookie = res.cookies.find((c) => c.name === "brill_sid")!;
   const call = (method: any, url: string, payload?: unknown) =>

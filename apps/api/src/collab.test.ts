@@ -11,7 +11,7 @@ let app: ReturnType<typeof buildApp>;
 
 type Client = { sid: string; call: (m: string, u: string, p?: unknown, h?: Record<string, string>) => Promise<{ code: number; body: any }> };
 async function signUp(email: string, name: string): Promise<Client> {
-  const r = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email, name, password: "password123" } });
+  const r = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email, name, password: "test-pass-2026" } });
   const sid = r.cookies.find((c) => c.name === "brill_sid")!.value;
   return {
     sid,
@@ -83,7 +83,7 @@ describe("sharing", () => {
     expect(list.myRole).toBe("owner");
     const ed = list.members.find((m: any) => m.name === "Ed Editor");
     const edClient = await (async () => {
-      const r = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "ed@brill.test", password: "password123" } });
+      const r = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "ed@brill.test", password: "test-pass-2026" } });
       const sid = r.cookies.find((c) => c.name === "brill_sid")!.value;
       return (m: string, u: string, p?: unknown) => app.inject({ method: m as any, url: u, payload: p as any, cookies: { brill_sid: sid } });
     })();

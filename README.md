@@ -1,11 +1,12 @@
 # Brill Tables
 
-In-house replacement for Airtable. See [BUILD_PLAN.md](BUILD_PLAN.md) for the full plan.
+In-house replacement for Airtable. See [docs/GUIDE.md](docs/GUIDE.md) for how everything works, [BUILD_PLAN.md](BUILD_PLAN.md) for the original plan and [SAAS_PLAN.md](SAAS_PLAN.md) for turning it into a SaaS product.
 
 ## Status: Phase 1 (foundation) — first working slice
 
 Works today:
-- Sign up / sign in (email + password, secure session cookie)
+- Sign up / sign in (email + password; hashed session ids with 30-day idle / 90-day absolute expiry; sign-in rate limits and account lockout; common passwords refused)
+- Account settings: change name or password (signs out other devices), sign out of other devices
 - Workspaces → bases → tables → fields → records
 - Create, rename, delete bases and tables (double-click a tab to rename, right-click to delete)
 - Field types: single line text, long text, number (decimal places), checkbox, single select, multiple select, date (optional time), email, URL, phone
@@ -62,6 +63,14 @@ pnpm dev:web
 ```
 
 Open http://localhost:5180 and create an account.
+
+To load a realistic demo base (clients, projects, tasks, invoices — every field and view type), with the API running:
+
+```bash
+pnpm seed:demo
+```
+
+Production settings (environment variables for the API): `PORT`, `HOST` (default 127.0.0.1), `DATA_DIR`, `FILES_DIR`, `NODE_ENV=production` (secure cookies + HSTS), `SECURE_COOKIES`, `TRUST_PROXY` (behind nginx/Caddy/a load balancer). `GET /api/health` checks the database.
 
 ## Tests
 

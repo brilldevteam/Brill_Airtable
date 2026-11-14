@@ -91,8 +91,8 @@ export function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              minLength={mode === "register" ? 8 : undefined}
-              placeholder={mode === "register" ? "At least 8 characters" : "••••••••"}
+              minLength={mode === "register" ? 10 : undefined}
+              placeholder={mode === "register" ? "At least 10 characters" : "••••••••"}
             />
           </label>
           {error && <div className="error banner" style={{ margin: 0 }}>{error}</div>}

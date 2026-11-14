@@ -34,7 +34,7 @@ beforeAll(async () => {
   db = await openDb("memory://");
   app = buildApp(db, { filesDir: mkdtempSync(join(tmpdir(), "brill-share-")) });
   await app.ready();
-  const r = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email: "s@brill.test", name: "Sam", password: "password123" } });
+  const r = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email: "s@brill.test", name: "Sam", password: "test-pass-2026" } });
   sid = r.cookies.find((c) => c.name === "brill_sid")!.value;
   const ws = (await call("GET", "/api/workspaces")).body;
   tableId = (await call("POST", `/api/workspaces/${ws.workspaces[0].id}/bases`, { name: "Requests" })).body.firstTableId;
@@ -133,7 +133,7 @@ describe("form views", () => {
   });
 
   it("only creators can share; editors can't", async () => {
-    const r = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email: "e@brill.test", name: "Ed", password: "password123" } });
+    const r = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email: "e@brill.test", name: "Ed", password: "test-pass-2026" } });
     const ed = r.cookies.find((c) => c.name === "brill_sid")!.value;
     const ws = (await call("GET", "/api/workspaces")).body.workspaces[0].id;
     await call("POST", `/api/workspaces/${ws}/invites`, { email: "e@brill.test", role: "editor" });

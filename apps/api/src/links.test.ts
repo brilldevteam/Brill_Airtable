@@ -16,7 +16,7 @@ beforeAll(async () => {
   app = buildApp(db, { filesDir: mkdtempSync(join(tmpdir(), "brill-test-")) });
   await app.ready();
   const res = await app.inject({
-    method: "POST", url: "/api/auth/register", payload: { email: "l@example.com", name: "L", password: "password123" },
+    method: "POST", url: "/api/auth/register", payload: { email: "l@example.com", name: "L", password: "test-pass-2026" },
   });
   const sid = res.cookies.find((c) => c.name === "brill_sid")!.value;
   status = async (method, url, payload) => {

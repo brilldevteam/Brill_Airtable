@@ -37,7 +37,7 @@ beforeAll(async () => {
   db = await openDb("memory://");
   app = buildApp(db, { filesDir: mkdtempSync(join(tmpdir(), "brill-att2-")) });
   await app.ready();
-  const res = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email: "a2@example.com", name: "Ann Two", password: "password123" } });
+  const res = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email: "a2@example.com", name: "Ann Two", password: "test-pass-2026" } });
   sid = res.cookies.find((c) => c.name === "brill_sid")!.value;
   const ws = (await req("GET", "/api/workspaces")).json();
   tableId = (await req("POST", `/api/workspaces/${ws.workspaces[0].id}/bases`, { name: "Media" })).json().firstTableId;
@@ -94,7 +94,7 @@ describe("rename and comments", () => {
     expect(c.userName).toBe("Ann Two");
     expect((await req("GET", `/api/attachments/${a.id}/comments`)).json().comments.map((x: any) => x.body)).toEqual(["Brighten the cup a bit"]);
 
-    const r = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email: "out@example.com", name: "Out", password: "password123" } });
+    const r = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email: "out@example.com", name: "Out", password: "test-pass-2026" } });
     const outsider = r.cookies.find((x) => x.name === "brill_sid")!.value;
     expect((await req("GET", `/api/attachments/${a.id}/comments`, undefined, {}, outsider)).code).toBe(404);
     expect((await req("DELETE", `/api/attachment-comments/${c.id}`, undefined, {}, outsider)).code).toBe(404);

@@ -185,6 +185,16 @@ const MIGRATIONS: string[] = [
   );
   ALTER TABLE attachments ADD COLUMN share_id TEXT
   `,
+  /* 007 hashed sessions with idle + absolute expiry; indexes for access checks */ `
+  DELETE FROM sessions;
+  ALTER TABLE sessions ADD COLUMN absolute_expires_at TIMESTAMPTZ NOT NULL DEFAULT now() + interval '90 days';
+  ALTER TABLE sessions ADD COLUMN last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now();
+  CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions (user_id);
+  CREATE INDEX IF NOT EXISTS sessions_expires_idx ON sessions (expires_at);
+  CREATE INDEX IF NOT EXISTS workspace_members_user_idx ON workspace_members (user_id);
+  CREATE INDEX IF NOT EXISTS bases_workspace_idx ON bases (workspace_id);
+  CREATE INDEX IF NOT EXISTS tables_base_idx ON tables (base_id)
+  `,
 ];
 
 async function migrate(db: Db) {

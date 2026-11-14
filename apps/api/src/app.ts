@@ -1,6 +1,7 @@
 import cookie from "@fastify/cookie";
 import multipart from "@fastify/multipart";
 import Fastify from "fastify";
+import { randomUUID } from "node:crypto";
 import { ZodError } from "zod";
 import { registerAuth } from "./auth";
 import type { Db } from "./db";
@@ -18,10 +19,32 @@ export interface AppOptions {
   logger?: boolean;
   /** Folder for uploaded files. */
   filesDir: string;
+  /** Trust X-Forwarded-For from a reverse proxy (true, a hop count, or a list of proxy IPs). */
+  trustProxy?: boolean | number | string;
 }
 
 export function buildApp(db: Db, opts: AppOptions) {
-  const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 10 * 1024 * 1024 });
+  const app = Fastify({
+    logger: opts.logger ?? false,
+    bodyLimit: 10 * 1024 * 1024,
+    // Behind a reverse proxy (nginx, Caddy, a load balancer) set TRUST_PROXY so req.ip is the visitor's address.
+    trustProxy: opts.trustProxy ?? false,
+    genReqId: () => randomUUID(),
+  });
+
+  // Security headers on every API response. Attachment downloads set their own stricter CSP.
+  app.addHook("onSend", async (req, reply) => {
+    reply.header("x-content-type-options", "nosniff");
+    reply.header("referrer-policy", "strict-origin-when-cross-origin");
+    reply.header("x-frame-options", "DENY");
+    reply.header("cross-origin-opener-policy", "same-origin");
+    reply.header("x-request-id", req.id);
+    if (!reply.hasHeader("content-security-policy")) reply.header("content-security-policy", "default-src 'none'; frame-ancestors 'none'");
+    if (opts.secureCookies) reply.header("strict-transport-security", "max-age=31536000; includeSubDomains");
+    if (!reply.hasHeader("cache-control") && req.url.startsWith("/api/") && !req.url.includes("/attachments/") && !req.url.includes("/files/")) {
+      reply.header("cache-control", "no-store");
+    }
+  });
   app.register(cookie);
   app.register(multipart, { limits: { fileSize: MAX_FILE_BYTES } });
 
@@ -30,7 +53,10 @@ export function buildApp(db: Db, opts: AppOptions) {
       const msg = err.issues.map((i) => `${i.path.join(".") || "body"}: ${i.message}`).join("; ");
       return reply.status(400).send({ error: msg });
     }
-    if (err instanceof HttpError) return reply.status(err.statusCode).send({ error: err.message });
+    if (err instanceof HttpError) {
+      if (err.headers) reply.headers(err.headers);
+      return reply.status(err.statusCode).send({ error: err.message });
+    }
     if ((err as any).statusCode && (err as any).statusCode < 500) {
       return reply.status((err as any).statusCode).send({ error: err.message });
     }
@@ -61,6 +87,13 @@ export function buildApp(db: Db, opts: AppOptions) {
     registerActivity(app, db);
     registerShare(app, db, files);
   });
-  app.get("/api/health", async () => ({ ok: true }));
+  app.get("/api/health", async (_req, reply) => {
+    try {
+      await db.query(`SELECT 1`);
+      return { ok: true };
+    } catch {
+      return reply.status(503).send({ ok: false, error: "database unavailable" });
+    }
+  });
   return app;
 }

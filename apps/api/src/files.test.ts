@@ -22,7 +22,7 @@ async function call(method: string, url: string, payload?: unknown) {
   return r.body;
 }
 async function signUp(email: string) {
-  const res = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email, name: "U", password: "password123" } });
+  const res = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email, name: "U", password: "test-pass-2026" } });
   return res.cookies.find((c) => c.name === "brill_sid")!.value;
 }
 function multipart(files: { name: string; type: string; data: Buffer }[], extraHeaders: Record<string, string> = { "x-brill-upload": "1" }) {

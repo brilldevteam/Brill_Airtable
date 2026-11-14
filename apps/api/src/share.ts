@@ -15,6 +15,7 @@ import { tableAccess, viewTableId } from "./access";
 import { requireUser } from "./auth";
 import type { Db } from "./db";
 import { HttpError } from "./errors";
+import { limiter } from "./rateLimit";
 import { streamAttachment, type SaveFile } from "./files";
 import { computeAllForRecord, Schema, writeCells } from "./links";
 import { bus } from "./realtime";
@@ -30,20 +31,8 @@ import { buildViewQuery } from "./viewQuery";
 
 const newToken = () => randomBytes(18).toString("base64url");
 
-/** Tiny in-memory rate limiter: at most `max` hits per `windowMs` per key. */
-function limiter(max: number, windowMs: number) {
-  const hits = new Map<string, number[]>();
-  return (key: string) => {
-    const now = Date.now();
-    const list = (hits.get(key) ?? []).filter((t) => now - t < windowMs);
-    if (list.length >= max) throw new HttpError(429, "Too many submissions — please wait a few minutes and try again");
-    list.push(now);
-    hits.set(key, list);
-    if (hits.size > 10_000) hits.clear();
-  };
-}
-const submitLimit = limiter(20, 10 * 60_000);
-const uploadLimit = limiter(40, 10 * 60_000);
+const submitLimit = limiter(20, 10 * 60_000, "Too many submissions — please wait a few minutes and try again");
+const uploadLimit = limiter(40, 10 * 60_000, "Too many uploads — please wait a few minutes and try again");
 const clientKey = (req: FastifyRequest, token: string) => `${req.ip}|${token}`;
 
 interface Share { id: string; view_id: string; token: string; enabled: boolean }

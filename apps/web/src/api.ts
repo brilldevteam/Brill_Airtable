@@ -19,6 +19,10 @@ async function call<T>(method: string, url: string, body?: unknown): Promise<T> 
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
+  // Session ended (expired, or signed out elsewhere): let the app return to the sign-in screen.
+  if (res.status === 401 && !url.startsWith("/api/auth/") && !url.startsWith("/api/public/")) {
+    window.dispatchEvent(new Event("brill:signed-out"));
+  }
   if (!res.ok) throw new ApiError(res.status, data.error ?? `Request failed (${res.status})`);
   return data as T;
 }
@@ -70,6 +74,10 @@ export const api = {
   register: (name: string, email: string, password: string) =>
     call<{ user: User }>("POST", "/api/auth/register", { name, email, password }),
   logout: () => call("POST", "/api/auth/logout", {}),
+  updateMe: (name: string) => call<{ user: User }>("PATCH", "/api/auth/me", { name }),
+  changePassword: (currentPassword: string, newPassword: string) => call("POST", "/api/auth/password", { currentPassword, newPassword }),
+  sessions: () => call<{ active: number }>("GET", "/api/auth/sessions"),
+  revokeOtherSessions: () => call("POST", "/api/auth/sessions/revoke-others", {}),
 
   workspaces: () => call<{ workspaces: Workspace[]; bases: Base[] }>("GET", "/api/workspaces"),
   createBase: (wsId: string, name: string, color: string) =>
