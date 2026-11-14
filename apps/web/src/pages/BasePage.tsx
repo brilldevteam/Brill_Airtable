@@ -1,6 +1,6 @@
 import type { Table } from "@brill/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Pencil, Plus, Sheet, Trash2, Users } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Pencil, Plus, Sheet, Trash2, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
@@ -11,6 +11,8 @@ import { Popover, anchorOf, type Anchor } from "../components/Popover";
 import { ShareDialog } from "../components/ShareDialog";
 import { TableWorkspace } from "../components/TableWorkspace";
 import { useBaseEvents } from "../useBaseEvents";
+
+const RECORD_ACCESS_LABEL = { all: "Everyone who can edit", team: "Workspace team only", creators: "Creators and owners only" } as const;
 
 export function BasePage() {
   const { baseId, tableId } = useParams();
@@ -23,7 +25,6 @@ export function BasePage() {
   const [tableMenu, setTableMenu] = useState<{ table: Table; anchor: Anchor } | null>(null);
   const [sharing, setSharing] = useState(false);
   const live = useBaseEvents(baseId);
-  const ws = useQuery({ queryKey: ["workspaces"], queryFn: api.workspaces });
 
   const tables = q.data?.tables ?? [];
   useEffect(() => {
@@ -46,9 +47,9 @@ export function BasePage() {
   if (q.isError) return <div className="center error">{(q.error as Error).message} — <Link to="/">back home</Link></div>;
   const base = q.data!.base;
   const role = q.data!.role;
+  const guest = q.data!.guest;
   const canDesign = role === "owner" || role === "creator";
   const color = BASE_COLORS[base.color] ?? BASE_COLORS.blue;
-  const workspaceName = ws.data?.workspaces.find((w) => w.id === base.workspaceId)?.name ?? "Workspace";
 
   const renameBase = async () => {
     const name = await dialogs.prompt({ title: "Rename base", label: "Base name", defaultValue: base.name });
@@ -98,7 +99,7 @@ export function BasePage() {
         </span>
         <button className="btn sm" onClick={() => setSharing(true)}><Users size={14} /> Share</button>
       </AppBar>
-      {sharing && <ShareDialog wsId={base.workspaceId} workspaceName={workspaceName} onClose={() => setSharing(false)} />}
+      {sharing && <ShareDialog baseId={base.id} onClose={() => setSharing(false)} />}
 
       <nav className="table-tabs">
         {tables.map((t) => {
@@ -135,7 +136,7 @@ export function BasePage() {
 
       {error && <div className="error banner" onClick={() => setError(null)}>{error}</div>}
       {tableId && tables.some((t) => t.id === tableId) && (
-        <TableWorkspace key={tableId} baseId={baseId!} tableId={tableId} tables={tables} role={role} />
+        <TableWorkspace key={tableId} baseId={baseId!} tableId={tableId} tables={tables} role={role} guest={guest} />
       )}
 
       {baseMenu && (
@@ -155,6 +156,17 @@ export function BasePage() {
         <Popover anchor={tableMenu.anchor} onClose={() => setTableMenu(null)} minWidth={200}>
           <div className="menu">
             <button onClick={() => { const t = tableMenu.table; setTableMenu(null); renameTable(t); }}><Pencil size={15} /> Rename table</button>
+            <div className="menu-label">Who can add and delete records</div>
+            {(["all", "team", "creators"] as const).map((v) => (
+              <button key={v} className={tableMenu.table.recordAccess === v ? "checked" : ""} onClick={() => {
+                const t = tableMenu.table;
+                setTableMenu(null);
+                run(async () => { await api.setRecordAccess(t.id, v); await refresh(); });
+              }}>
+                <span className="menu-check">{tableMenu.table.recordAccess === v ? <Check size={14} /> : null}</span>
+                {RECORD_ACCESS_LABEL[v]}
+              </button>
+            ))}
             {tables.length > 1 && (
               <>
                 <hr />

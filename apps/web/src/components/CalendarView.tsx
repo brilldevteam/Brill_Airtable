@@ -33,7 +33,7 @@ export function CalendarView({ ctx }: { ctx: ViewContext }) {
   const dateField = allFields.find((f) => f.id === view.config.dateFieldId && isDateLike(f));
   const colorField = allFields.find((f) => f.id === view.config.colorFieldId && f.type === "singleSelect");
   const primary = allFields.find((f) => f.id === primaryFieldId);
-  const editable = dateField?.type === "date" && ctx.canEdit;
+  const editable = dateField?.type === "date" && ctx.canEditField(dateField);
 
   const [month, setMonth] = useState(() => {
     const now = new Date();
@@ -160,7 +160,7 @@ export function CalendarView({ ctx }: { ctx: ViewContext }) {
             >
               <div className="cal-day-head">
                 <span className="cal-date">{d.getDate() === 1 ? d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : d.getDate()}</span>
-                {editable && (
+                {editable && ctx.canAddRecords && (
                   <button
                     className="cal-add"
                     title="Add a record on this day"

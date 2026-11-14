@@ -47,7 +47,7 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const inviteToken = /^\/invite\/([\w-]+)/.exec(window.location.pathname)?.[1];
-  const [invite, setInvite] = useState<{ email: string; workspace: string; invitedBy: string | null } | null>(null);
+  const [invite, setInvite] = useState<{ email: string; workspace: string; base: string | null; invitedBy: string | null } | null>(null);
   useEffect(() => {
     if (!inviteToken) return;
     api.inviteInfo(inviteToken).then((i) => { setInvite(i); setEmail(i.email); setMode("register"); }, () => undefined);
@@ -112,7 +112,7 @@ export function LoginPage() {
           {invite && (
             <div className="invite-banner">
               <Users size={16} />
-              <span><b>{invite.invitedBy ?? "Someone"}</b> invited you to <b>{invite.workspace}</b>. {mode === "register" ? "Create an account" : "Sign in"} with {invite.email} to join.</span>
+              <span><b>{invite.invitedBy ?? "Someone"}</b> invited you to <b>{invite.base ?? invite.workspace}</b>. {mode === "register" ? "Create an account" : "Sign in"} with {invite.email} to join.</span>
             </div>
           )}
           <div>

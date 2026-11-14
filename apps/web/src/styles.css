@@ -827,6 +827,9 @@ a.btn { text-decoration: none; }
 .role-pill { display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: 999px; background: var(--surface-3); color: var(--text-2); font-size: 12px; font-weight: 500; white-space: nowrap; }
 
 .share-modal { max-width: 560px; }
+/* The dialog scrolls as a whole; nothing inside it gets squeezed. */
+.share-modal > * { flex-shrink: 0; }
+.share-modal .share-list { min-height: 140px; }
 .share-invite { display: flex; gap: 8px; }
 .share-invite .input-icon { flex: 1; }
 .share-invite select { width: 130px; flex-shrink: 0; }
@@ -1049,3 +1052,30 @@ a.btn { text-decoration: none; }
 .devmail-list button.on { background: var(--accent-soft); }
 .devmail-view { width: 100%; height: 100%; border: none; background: #f4f4f6; }
 @media (max-width: 760px) { .devmail-body { grid-template-columns: 1fr; grid-template-rows: 220px 1fr; } .devmail-list { border-right: none; border-bottom: 1px solid var(--border); } }
+
+/* ---------- base sharing (clients) & locked fields ---------- */
+.share-invite-box { display: flex; flex-direction: column; gap: 10px; }
+.share-scope { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.share-scope button {
+  display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 7px; row-gap: 2px; text-align: left;
+  padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: var(--r-lg); background: var(--surface);
+  font-size: 13.5px; font-weight: 600; color: var(--text); transition: border-color .15s, background .15s, box-shadow .15s;
+}
+.share-scope button svg { color: var(--text-3); }
+.share-scope button small { grid-column: 1 / -1; font-size: 12px; font-weight: 400; color: var(--text-3); }
+.share-scope button:hover:not(:disabled) { border-color: var(--accent); }
+.share-scope button.on { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 3px var(--accent-ring); }
+.share-scope button.on svg { color: var(--accent); }
+.share-scope button:disabled { opacity: .5; cursor: not-allowed; }
+.share-group { display: flex; align-items: center; gap: 6px; padding: 8px 12px 6px; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--text-3); background: var(--surface-2); border-top: 1px solid var(--border); position: sticky; top: 0; z-index: 1; }
+.share-group:first-child { border-top: none; }
+.share-group + .share-row { border-top: 1px solid var(--border); }
+.share-empty { padding: 10px 12px 12px; font-size: 13px; color: var(--text-3); }
+.avatar.guest { background: #fef3c7; color: #92400e; box-shadow: inset 0 0 0 1px #fde68a; }
+.share-tip { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: var(--r-md); background: var(--accent-soft); font-size: 12.5px; color: var(--text-2); line-height: 1.5; }
+.share-tip svg { color: var(--accent); flex-shrink: 0; margin-top: 2px; }
+.role-pill.guest { background: #fef3c7; color: #92400e; }
+.lock-pill { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--surface-3); color: var(--text-3); font-size: 11px; font-weight: 500; }
+.menu button.checked { color: var(--text); font-weight: 500; }
+.menu-check { width: 15px; display: inline-grid; place-items: center; color: var(--accent); }
+@media (max-width: 560px) { .share-scope { grid-template-columns: 1fr; } }

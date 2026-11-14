@@ -11,6 +11,7 @@ import {
   type Field,
   type FieldType,
   type RollupAggregation,
+  type EditAccess,
 } from "@brill/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
@@ -33,6 +34,7 @@ export function FieldDialog({ field, isPrimary, tableId, tables, tableFields, on
   const o = field?.options ?? {};
   const [name, setName] = useState(field?.name ?? "");
   const [type, setType] = useState<FieldType>(field?.type ?? "singleLineText");
+  const [editAccess, setEditAccess] = useState<EditAccess>(field?.options.editAccess ?? "all");
   const [precision, setPrecision] = useState(o.precision ?? 0);
   const [includeTime, setIncludeTime] = useState(o.includeTime ?? false);
   const [choicesText, setChoicesText] = useState((o.choices ?? []).map((c) => c.name).join("\n"));
@@ -110,7 +112,10 @@ export function FieldDialog({ field, isPrimary, tableId, tables, tableFields, on
     }
     setBusy(true);
     try {
-      await onSave({ name: name.trim(), type, options: editingStructural && type === "link" ? undefined : options });
+      await onSave({
+        name: name.trim(), type, options: editingStructural && type === "link" ? undefined : options,
+        ...(COMPUTED_TYPES.has(type) ? {} : { editAccess }),
+      });
       onClose();
     } catch (err) {
       setError((err as Error).message);
@@ -198,6 +203,18 @@ export function FieldDialog({ field, isPrimary, tableId, tables, tableFields, on
             <select value={aggregation} onChange={(e) => setAggregation(e.target.value as RollupAggregation)}>
               {ROLLUP_AGGREGATIONS.map((a) => <option key={a} value={a}>{ROLLUP_LABELS[a]}</option>)}
             </select>
+          </label>
+        )}
+
+        {!COMPUTED_TYPES.has(type) && (
+          <label>
+            Who can edit this field
+            <select value={editAccess} onChange={(e) => setEditAccess(e.target.value as EditAccess)}>
+              <option value="all">Everyone who can edit</option>
+              <option value="team">Workspace team only (not clients)</option>
+              <option value="creators">Creators and owners only</option>
+            </select>
+            {editAccess !== "all" && <span className="hint" style={{ margin: 0 }}>Others can still see the field, but can't change it.</span>}
           </label>
         )}
 

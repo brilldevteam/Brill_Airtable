@@ -50,7 +50,7 @@ export function GridView({ ctx }: { ctx: ViewContext }) {
 
   const columns: GridColumn[] = fields.map((f) => ({
     id: f.id,
-    title: f.name,
+    title: f.options.editAccess && f.options.editAccess !== "all" ? `${f.name}  🔒` : f.name,
     icon: GRID_ICONS[f.type],
     width: liveWidths[f.id] ?? cfg.columnWidths[f.id] ?? (f.id === primaryFieldId ? 220 : 160),
     hasMenu: true,
@@ -59,9 +59,13 @@ export function GridView({ ctx }: { ctx: ViewContext }) {
   const getCellContent = useCallback(
     (item: Item): GridCell => {
       const cell = cellFor(item);
-      return ctx.canEdit ? cell : ({ ...cell, readonly: true, allowOverlay: false } as GridCell);
+      const f = fields[item[0]];
+      if (ctx.canEdit && f && ctx.canEditField(f)) return cell;
+      // Locked fields can still be opened (to read long text, play a reel...), just not changed.
+      if (ctx.canEdit && f && (f.type === "attachment" || f.type === "longText")) return { ...cell, readonly: true } as GridCell;
+      return { ...cell, readonly: true, allowOverlay: false } as GridCell;
     },
-    [fields, rows, cfg.rowHeight, labels, files, ctx.canEdit],
+    [fields, rows, cfg.rowHeight, labels, files, ctx.canEdit, ctx.canEditField],
   );
   const cellFor = useCallback(
     ([col, row]: Item): GridCell => {
@@ -131,7 +135,7 @@ export function GridView({ ctx }: { ctx: ViewContext }) {
     ([col, row]: Item, cell: EditableGridCell) => {
       const f = fields[col];
       const r = rows[row];
-      if (!f || !r || COMPUTED_TYPES.has(f.type) || f.type === "link") return;
+      if (!f || !r || COMPUTED_TYPES.has(f.type) || f.type === "link" || !ctx.canEditField(f)) return;
       let value: unknown;
       if (cell.kind === GridCellKind.Number) value = cell.data ?? null;
       else if (cell.kind === GridCellKind.Boolean) value = cell.data === true;
@@ -154,7 +158,7 @@ export function GridView({ ctx }: { ctx: ViewContext }) {
       if (!r) continue;
       const patch: Record<string, CellValue> = {};
       for (let col = rect.x; col < rect.x + rect.width; col++) {
-        if (fields[col] && !COMPUTED_TYPES.has(fields[col].type)) patch[fields[col].id] = null;
+        if (fields[col] && !COMPUTED_TYPES.has(fields[col].type) && ctx.canEditField(fields[col])) patch[fields[col].id] = null;
       }
       if (Object.keys(patch).length === 0) continue;
       saveCells(r.id, patch);
@@ -167,6 +171,7 @@ export function GridView({ ctx }: { ctx: ViewContext }) {
     const f = fields[col];
     const r = rows[row];
     if (!f || !r || !["singleSelect", "multipleSelect", "link", "attachment"].includes(f.type)) return;
+    if (!ctx.canEditField(f) && f.type !== "attachment") return;
     const b = gridRef.current?.getBounds(col, row);
     if (b) setPicker({ field: f, recordId: r.id, anchor: b });
   };
@@ -223,7 +228,7 @@ export function GridView({ ctx }: { ctx: ViewContext }) {
           onColumnResize={onColumnResize}
           onColumnMoved={onColumnMoved}
           onHeaderMenuClick={(col, bounds) => ctx.canEdit && setFieldMenu({ field: fields[col], anchor: bounds })}
-          trailingRowOptions={ctx.canEdit ? { hint: "New record", sticky: true, tint: true } : undefined}
+          trailingRowOptions={ctx.canAddRecords ? { hint: "New record", sticky: true, tint: true } : undefined}
           onRowAppended={() => { void ctx.addRecord(); }}
           rightElement={ctx.canDesign ? <button className="add-col" title="Add field" onClick={() => ctx.editField()}><Plus size={16} /></button> : undefined}
           rightElementProps={{ fill: false, sticky: false }}
@@ -264,7 +269,7 @@ export function GridView({ ctx }: { ctx: ViewContext }) {
           {selectedIds.length === 1 && (
             <button className="btn sm" onClick={() => ctx.openRecord(selectedIds[0])}><Maximize2 size={14} /> Expand</button>
           )}
-          {ctx.canEdit && <button
+          {ctx.canDeleteRecords && <button
             className="btn sm danger"
             onClick={async () => {
               const n = selectedIds.length;

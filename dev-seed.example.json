@@ -13,5 +13,10 @@
     "email": "qa@brill.test",
     "password": "qa-pass-9Vt3wHs2",
     "newPassword": "qa-reset-5Lm8pZr4"
+  },
+  "client": {
+    "name": "Chris Client",
+    "email": "client@brill.test",
+    "password": "client-pass-6Hn2qWx8"
   }
 }

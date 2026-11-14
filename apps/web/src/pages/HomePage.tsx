@@ -1,6 +1,6 @@
 import type { User } from "@brill/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpRight, Database, Plus } from "lucide-react";
+import { ArrowUpRight, Database, Plus, Users } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
@@ -41,6 +41,31 @@ export function HomePage({ user }: { user: User }) {
     }
   }
 
+  const ownEmpty = !!ws.data && ws.data.bases.length === 0;
+  const sharedSection = !!ws.data?.sharedBases.length && (        
+          <section className="ws-section">
+            <div className="ws-head">
+              <h2>Shared with you</h2>
+              <span className="count">{ws.data.sharedBases.length} {ws.data.sharedBases.length === 1 ? "base" : "bases"}</span>
+            </div>
+            <div className="base-grid">
+              {ws.data.sharedBases.map((b) => {
+                const color = BASE_COLORS[b.color] ?? BASE_COLORS.blue;
+                return (
+                  <Link key={b.id} to={`/base/${b.id}`} className="base-card">
+                    <div className="base-icon" style={{ background: color }}>{b.name.slice(0, 2)}</div>
+                    <ArrowUpRight size={16} className="open-hint" />
+                    <div>
+                      <div className="base-name">{b.name}</div>
+                      <div className="base-meta"><Users size={13} /> From {b.workspaceName}</div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
+  );
+
   const firstName = user.name.split(" ")[0];
   const canCreate = (role: string) => role === "owner" || role === "creator";
 
@@ -64,6 +89,7 @@ export function HomePage({ user }: { user: User }) {
         {error && <div className="error banner" style={{ margin: "0 0 16px" }}>{error}</div>}
         {ws.isLoading && <div className="center"><div className="spinner" /></div>}
 
+        {ownEmpty && sharedSection}
         {ws.data?.workspaces.map((w) => {
           const bases = ws.data.bases.filter((b) => b.workspaceId === w.id);
           return (
@@ -106,6 +132,7 @@ export function HomePage({ user }: { user: User }) {
             </section>
           );
         })}
+        {!ownEmpty && sharedSection}
       </main>
     </div>
   );

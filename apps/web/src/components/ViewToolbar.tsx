@@ -106,8 +106,9 @@ export function ViewToolbar({ ctx, recordCount, loading }: { ctx: ViewContext; r
       </div>
       <span className="count">{loading ? "…" : plural(recordCount, "record")}</span>
       {ctx.canDesign && <button className="btn sm hide-sm" onClick={() => ctx.editField()}><Plus size={14} /> Field</button>}
-      {ctx.canEdit && <button className="btn primary sm" onClick={() => ctx.addRecord()}><Plus size={14} /> Record</button>}
-      {!ctx.canEdit && <span className="role-pill">{ctx.canComment ? "Can comment" : "Read only"}</span>}
+      {ctx.canAddRecords && <button className="btn primary sm" onClick={() => ctx.addRecord()}><Plus size={14} /> Record</button>}
+      {ctx.guest && <span className="role-pill guest" title="You were invited to this base only">Guest · {ctx.canEdit ? "can edit" : ctx.canComment ? "can comment" : "read only"}</span>}
+      {!ctx.canEdit && !ctx.guest && <span className="role-pill">{ctx.canComment ? "Can comment" : "Read only"}</span>}
       <button className="icon-btn" title="More" onClick={toggle("more")} style={{ marginLeft: 2 }}><MoreHorizontal size={17} /></button>
       {sharing && (
         <ShareLinkDialog viewId={view.id} viewName={view.name} isForm={false} canManage={ctx.canDesign} onClose={() => setSharing(false)} />
@@ -133,7 +134,7 @@ export function ViewToolbar({ ctx, recordCount, loading }: { ctx: ViewContext; r
           )}
           {open.panel === "more" && (
             <div className="menu">
-              {ctx.canEdit && <button onClick={() => { setOpen(null); setImporting(true); }}><FileUp size={15} /> Import CSV…</button>}
+              {ctx.canAddRecords && <button onClick={() => { setOpen(null); setImporting(true); }}><FileUp size={15} /> Import CSV…</button>}
               <button onClick={() => { setOpen(null); setSharing(true); }}><Globe size={15} /> Share view (public link)…</button>
               <button onClick={() => { setOpen(null); window.location.href = api.exportCsvUrl(view.id); }}>
                 <Download size={15} /> Download CSV of this view

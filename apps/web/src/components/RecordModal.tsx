@@ -1,6 +1,6 @@
 import { COMPUTED_TYPES, FIELD_TYPE_LABELS, cellToText, type AttachmentInfo, type CellValue, type Field, type LinkLabels, type RecordRow } from "@brill/shared";
 import { useEffect, useState } from "react";
-import { Trash2, X } from "lucide-react";
+import { Trash2, X, Lock } from "lucide-react";
 import { useDialogs } from "./Dialogs";
 import { FieldIcon } from "./fieldIcons";
 import { AttachmentTiles } from "./AttachmentPicker";
@@ -20,13 +20,15 @@ interface Props {
   onDelete: () => void;
   onClose: () => void;
   canEdit: boolean;
+  canEditField: (field: Field) => boolean;
+  canDelete: boolean;
   canComment: boolean;
   /** All fields of the table (history may mention hidden ones). */
   allFields: Field[];
 }
 
 /** Expanded record: every field as a form input. Each field saves when you leave it. */
-export function RecordModal({ record, fields, primaryFieldId, labels, files, tableId, addFiles, onSave, onDelete, onClose, canEdit, canComment, allFields }: Props) {
+export function RecordModal({ record, fields, primaryFieldId, labels, files, tableId, addFiles, onSave, onDelete, onClose, canEdit, canEditField, canDelete, canComment, allFields }: Props) {
   const primary = fields.find((f) => f.id === primaryFieldId);
   const title = primary ? cellToText(primary, record.cells[primary.id] ?? null) : "";
   const dialogs = useDialogs();
@@ -44,7 +46,7 @@ export function RecordModal({ record, fields, primaryFieldId, labels, files, tab
         <div className="record-head">
           <h3>{title || "Unnamed record"}</h3>
           <div className="spacer" />
-          {canEdit && <button
+          {canDelete && <button
             className="btn sm danger"
             onClick={async () => {
               const ok = await dialogs.confirm({ title: "Delete this record?", message: "It will be removed from every view and link.", confirmText: "Delete", danger: true });
@@ -58,17 +60,20 @@ export function RecordModal({ record, fields, primaryFieldId, labels, files, tab
         <div className="record-fields">
           {fields.map((f) => (
             <div key={f.id} className="record-field">
-              <div className="record-label"><FieldIcon type={f.type} size={14} /> {f.name} <span className="muted">· {FIELD_TYPE_LABELS[f.type]}</span></div>
+              <div className="record-label">
+                <FieldIcon type={f.type} size={14} /> {f.name} <span className="muted">· {FIELD_TYPE_LABELS[f.type]}</span>
+                {canEdit && !canEditField(f) && !COMPUTED_TYPES.has(f.type) && <span className="lock-pill" title="This field is locked — you can view it but not change it"><Lock size={11} /> Locked</span>}
+              </div>
               {f.type === "attachment" ? (
                 <AttachmentTiles
                   tableId={tableId}
                   value={(record.cells[f.id] as string[] | undefined) ?? []}
                   files={files}
                   onFiles={addFiles}
-                  canEdit={canEdit}
+                  canEdit={canEditField(f)}
                   onChange={(ids) => onSave({ [f.id]: ids.length ? ids : null })}
                 />
-              ) : canEdit ? (
+              ) : canEditField(f) ? (
                 <FieldInput field={f} value={record.cells[f.id] ?? null} labels={labels} onSave={(v) => onSave({ [f.id]: v })} />
               ) : (
                 <div className="computed-value">{(f.type === "checkbox" ? (record.cells[f.id] ? "✓" : "") : cellToText(f, record.cells[f.id] ?? null, labels)) || <span className="muted">—</span>}</div>

@@ -1,6 +1,6 @@
 import {
   COMPUTED_TYPES, orderedFieldIds, type AttachmentInfo, type CellValue, type Field, type LinkLabels, type RecordRow, type TableDetail, type View,
-  type ViewConfig, type ViewRecords,
+  type ViewConfig, type ViewRecords, type EditAccess, type Table,
 } from "@brill/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -37,6 +37,12 @@ export interface ViewContext {
   addFiles: (infos: AttachmentInfo[]) => void;
   /** What the signed-in user may do here (the server enforces the same rules). */
   canEdit: boolean;
+  /** Invited to this base only (e.g. a client), not a workspace member. */
+  guest: boolean;
+  /** May the user change this field's values? (role + the field's "who can edit" lock) */
+  canEditField: (field: Field) => boolean;
+  canAddRecords: boolean;
+  canDeleteRecords: boolean;
   canDesign: boolean;
   canComment: boolean;
   /** Reload fields and records (after imports etc.). */
@@ -53,8 +59,22 @@ export interface ViewContext {
 /** Config keys that change which records are shown or their order. */
 const QUERY_KEYS: (keyof ViewConfig)[] = ["filters", "sorts"];
 
-export function TableWorkspace({ baseId, tableId, tables, role }: { baseId: string; tableId: string; tables: { id: string; name: string }[]; role: string }) {
+/** Does this role pass a field's or table's edit restriction? (Mirrors the server's check.) */
+export function accessAllows(role: string, guest: boolean, rule: EditAccess | undefined) {
+  if (!["owner", "creator", "editor"].includes(role)) return false;
+  if (role === "owner" && !guest) return true;
+  if (rule === "creators") return role === "owner" || role === "creator";
+  if (rule === "team") return !guest;
+  return true;
+}
+
+export function TableWorkspace({ baseId, tableId, tables, role, guest }: {
+  baseId: string; tableId: string; tables: Table[]; role: string; guest: boolean;
+}) {
   const canEdit = ["owner", "creator", "editor"].includes(role);
+  const recordAccess = tables.find((t) => t.id === tableId)?.recordAccess ?? "all";
+  const canAddRecords = accessAllows(role, guest, recordAccess);
+  const canEditField = (f: Field) => accessAllows(role, guest, f.options.editAccess);
   const canDesign = ["owner", "creator"].includes(role);
   const canComment = role !== "read";
   const { viewId: viewParam } = useParams();
@@ -179,6 +199,10 @@ export function TableWorkspace({ baseId, tableId, tables, role }: { baseId: stri
     setSearch,
     files: recordsQ.data?.files ?? {},
     canEdit,
+    guest,
+    canEditField,
+    canAddRecords,
+    canDeleteRecords: canAddRecords,
     canDesign,
     canComment,
     refresh: () => {
@@ -266,6 +290,8 @@ export function TableWorkspace({ baseId, tableId, tables, role }: { baseId: stri
           tableId={tableId}
           addFiles={ctx.addFiles}
           canEdit={canEdit}
+          canEditField={canEditField}
+          canDelete={canAddRecords}
           canComment={canComment}
           allFields={allFields}
           onSave={(patch) => saveCells(openRecord.id, patch)}

@@ -104,6 +104,17 @@ Select an attachment cell and press Enter to open the strip. **Add** offers **Lo
 | Read only | Read. |
 
   Every invite is **emailed**, to existing users and new people alike. They join only when they click **Accept invite** while signed in with that email address, after confirming it, so nobody is added to a workspace without saying yes. The owner also sees the link, to send it another way if needed. It works only for that email and expires in 14 days. The screens hide what your role can't do, and the server enforces it on every request.
+- **Sharing one base with a client.** In **Share**, pick **Only this base**, enter the client's email and a role (usually **Editor**). They get an email, create an account, confirm it and click **Accept invite**. They land in that base, and their home page lists it under **Shared with you**. They never see your other bases, and the sharing panel hides your team's email addresses from them. A "Guest" badge in the toolbar reminds everyone that they're an outside person.
+- **Locking fields.** Open a field's **Edit field** and set **Who can edit this field**:
+  - **Everyone who can edit**: the default.
+  - **Workspace team only (not clients)**: people invited to just this base can see the field but can't change it.
+  - **Creators and owners only.**
+
+  Locked fields show 🔒 in the grid header and a **Locked** tag in the record form. Typical setup for client approvals:
+  1. Attach the reel to a **Reel** (attachment) field and lock it to the team.
+  2. Lock **Status** too.
+  3. Leave **Caption** open. The client plays the reel, types the caption and comments. Your team sees it live, and **History** shows who wrote it.
+- **Who can add and delete records.** The table's menu (the ▾ next to its name) sets this per table, with the same three choices. Choose "Workspace team only" to stop clients creating or deleting rows.
 - **Live updates**: teammates' changes appear within about a second, without a refresh. The green "● Live" dot shows the connection.
 
 ## 11. Public links
@@ -137,7 +148,7 @@ Browser (React + Vite)            API (Node + Fastify)                Storage
   - URL fetches are protected against SSRF.
   - Spreadsheet exports are protected against formula injection.
 - **Quality:**
-  - `pnpm test` runs 96 automated tests across API and engine.
+  - `pnpm test` runs 104 automated tests across API and engine.
   - `pnpm typecheck` checks types across the whole project.
   - `pnpm seed:demo` exercises the HTTP API end to end.
 

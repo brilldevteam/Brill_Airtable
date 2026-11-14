@@ -93,6 +93,12 @@ export const emails = {
     ...layout(`Reset your password`, [`Hi ${name}, someone (hopefully you) asked to reset the password for this account.`],
       { label: "Choose a new password", url }, "This link expires in 1 hour and works once. If you didn't ask for this, ignore this email — your password won't change."),
   }),
+  baseInvite: (to: string, inviter: string, base: string, role: string, url: string): Email => ({
+    to,
+    subject: `${inviter} shared “${base}” with you on Brill Tables`,
+    ...layout(`Join “${base}”`, [`${inviter} invited you to the “${base}” base as ${role}. You'll see only this base.`],
+      { label: "Open the base", url }, "This invite works only for this email address and expires in 14 days."),
+  }),
   invite: (to: string, inviter: string, workspace: string, role: string, url: string): Email => ({
     to,
     subject: `${inviter} invited you to ${workspace} on Brill Tables`,

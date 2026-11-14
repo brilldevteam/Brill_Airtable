@@ -208,6 +208,18 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX email_tokens_user_idx ON email_tokens (user_id, kind)
   `,
+  /* 009 base-only members (e.g. clients), base invites, record add/delete restrictions */ `
+  CREATE TABLE base_members (
+    base_id TEXT NOT NULL REFERENCES bases(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role TEXT NOT NULL CHECK (role IN ('creator','editor','commenter','read')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (base_id, user_id)
+  );
+  CREATE INDEX base_members_user_idx ON base_members (user_id);
+  ALTER TABLE workspace_invites ADD COLUMN base_id TEXT REFERENCES bases(id) ON DELETE CASCADE;
+  ALTER TABLE tables ADD COLUMN record_access TEXT NOT NULL DEFAULT 'all' CHECK (record_access IN ('all','team','creators'))
+  `,
 ];
 
 async function migrate(db: Db) {

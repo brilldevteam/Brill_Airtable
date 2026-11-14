@@ -11,7 +11,7 @@ import {
 } from "@brill/shared";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { tableAccess, viewTableId } from "./access";
+import { tableAccess, viewTableId, checkFieldEdits, checkRecordAccess } from "./access";
 import { requireUser } from "./auth";
 import type { Db } from "./db";
 import { HttpError } from "./errors";
@@ -182,7 +182,8 @@ export function registerImportExport(app: FastifyInstance, db: Db) {
         dateOrder: z.enum(["dmy", "mdy"]).default("dmy"),
       })
       .parse(req.body);
-    await tableAccess(db, user.id, tableId, "editor");
+    const access = await tableAccess(db, user.id, tableId, "editor");
+    await checkRecordAccess(db, access, tableId, "add");
 
     const ids = await db.tx(async (t) => {
       const fields = await loadFields(t, tableId);
@@ -194,6 +195,7 @@ export function registerImportExport(app: FastifyInstance, db: Db) {
             ? await typecastCells(t, tableId, fields, r.cells, { dateOrder: body.dateOrder, userId: user.id })
             : r.cells;
           const cells = await prepareCells(t, tableId, input);
+          await checkFieldEdits(t, access, tableId, Object.keys(cells));
           const id = newId("rec");
           await t.query(`INSERT INTO records (id, table_id, cells, created_by, updated_by) VALUES ($1,$2,'{}',$3,$3)`, [id, tableId, user.id]);
           await writeCells(t, schema, user.id, tableId, id, cells, "create");

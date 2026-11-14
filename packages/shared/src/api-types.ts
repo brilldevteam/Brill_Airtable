@@ -9,7 +9,16 @@ export interface User {
   emailVerified?: boolean;
 }
 export interface Base { id: string; workspaceId: string; name: string; color: string }
-export interface Table { id: string; baseId: string; name: string; primaryFieldId: string | null; position: number }
+export type EditAccess = "all" | "team" | "creators";
+export interface Table {
+  id: string;
+  baseId: string;
+  name: string;
+  primaryFieldId: string | null;
+  position: number;
+  /** Who may add and delete records. */
+  recordAccess: EditAccess;
+}
 export interface RecordRow {
   id: string;
   cells: Record<string, CellValue>;

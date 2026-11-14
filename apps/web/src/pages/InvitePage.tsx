@@ -21,9 +21,9 @@ export function InvitePage() {
     setBusy(true);
     setError(null);
     try {
-      await api.acceptInvite(token!);
+      const r = await api.acceptInvite(token!);
       await qc.invalidateQueries({ queryKey: ["workspaces"] });
-      nav("/", { replace: true });
+      nav(r.baseId ? `/base/${r.baseId}` : "/", { replace: true });
     } catch (e) {
       setError((e as Error).message);
       setBusy(false);
@@ -46,9 +46,9 @@ export function InvitePage() {
           )}
           {info.data && (
             <>
-              <h2>Join {info.data.workspace}</h2>
+              <h2>{info.data.base ? <>Open “{info.data.base}”</> : <>Join {info.data.workspace}</>}</h2>
               <p className="muted">
-                {info.data.invitedBy ?? "Someone"} invited <b>{info.data.email}</b> as <b>{ROLE_INFO[info.data.role].label}</b>
+                {info.data.invitedBy ?? "Someone"} invited <b>{info.data.email}</b>{info.data.base ? <> to the <b>{info.data.base}</b> base</> : null} as <b>{ROLE_INFO[info.data.role].label}</b>
                 {" — "}{ROLE_INFO[info.data.role].hint.toLowerCase()}.
               </p>
               {me && me.email.toLowerCase() !== info.data.email && (

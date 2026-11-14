@@ -152,8 +152,15 @@ async function main() {
   await addField(projectsT, "Budget", "number", { precision: 0 });
   await addField(projectsT, "Start date", "date");
   await addField(projectsT, "Due date", "date");
-  await addField(projectsT, "Cover", "attachment");
+  const coverF = await addField(projectsT, "Cover", "attachment");
   await addField(projectsT, "Retainer", "checkbox");
+  // Client sharing: clients may write the caption, but only the team changes the cover, status and budget.
+  await addField(projectsT, "Caption", "longText");
+  for (const name of ["Status", "Budget"]) {
+    const f = (await fieldsOf(projectsT)).find((x) => x.name === name)!;
+    await call("PATCH", `/api/fields/${f.id}`, { editAccess: "team" });
+  }
+  await call("PATCH", `/api/fields/${coverF.id}`, { editAccess: "team" });
   const clientsF = new Map((await fieldsOf(clientsT)).map((f) => [f.name, f]));
   await addField(projectsT, "Client city", "lookup", { linkFieldId: projClient.id, targetFieldId: clientsF.get("City")!.id });
 

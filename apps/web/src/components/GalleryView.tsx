@@ -66,7 +66,7 @@ export function GalleryView({ ctx }: { ctx: ViewContext }) {
           </button>
         );
       })}
-      {ctx.canEdit && <button className="g-card g-add" onClick={async () => { const rec = await ctx.addRecord(); if (rec) ctx.openRecord(rec.id); }}>
+      {ctx.canAddRecords && <button className="g-card g-add" onClick={async () => { const rec = await ctx.addRecord(); if (rec) ctx.openRecord(rec.id); }}>
         <Plus size={22} />
         <span>Add record</span>
       </button>}

@@ -1,5 +1,5 @@
 import type {
-  AttachmentInfo, Base, Field, FieldOptions, FieldType, RecordRow, Table, TableDetail, User, View, ViewConfig, ViewRecords, ViewType,
+  AttachmentInfo, EditAccess, Base, Field, FieldOptions, FieldType, RecordRow, Table, TableDetail, User, View, ViewConfig, ViewRecords, ViewType,
 } from "@brill/shared";
 
 export class ApiError extends Error {
@@ -63,9 +63,22 @@ export interface HistoryEntry {
   changes: Record<string, { from: import("@brill/shared").CellValue; to: import("@brill/shared").CellValue }>;
 }
 export interface AttachmentComment { id: string; body: string; createdAt: string; userId: string; userName: string }
+export interface SharedBase extends Base { role: Role; workspaceName: string }
+export interface BaseSharing {
+  base: { id: string; name: string };
+  workspace: { id: string; name: string };
+  myRole: Role;
+  guest: boolean;
+  canManageBase: boolean;
+  canManageWorkspace: boolean;
+  members: Member[];
+  guests: Member[];
+  invites: (PendingInvite & { scope: "base" | "workspace" })[];
+}
 export interface FieldInput {
   name?: string;
   type?: FieldType;
+  editAccess?: EditAccess;
   options?: Omit<Partial<FieldOptions>, "choices"> & { choices?: { id?: string; name: string; color?: string }[] };
 }
 
@@ -85,13 +98,21 @@ export const api = {
   resetPassword: (token: string, password: string) => call<{ user: User }>("POST", "/api/auth/reset-password", { token, password }),
   devMail: () => call<{ emails: DevEmail[] }>("GET", "/api/dev/mail"),
 
-  workspaces: () => call<{ workspaces: Workspace[]; bases: Base[] }>("GET", "/api/workspaces"),
+  workspaces: () => call<{ workspaces: Workspace[]; bases: Base[]; sharedBases: SharedBase[] }>("GET", "/api/workspaces"),
   createBase: (wsId: string, name: string, color: string) =>
     call<{ base: Base; firstTableId: string }>("POST", `/api/workspaces/${wsId}/bases`, { name, color }),
   updateBase: (id: string, patch: { name?: string; color?: string }) => call("PATCH", `/api/bases/${id}`, patch),
   deleteBase: (id: string) => call("DELETE", `/api/bases/${id}`),
 
-  base: (id: string) => call<{ base: Base; tables: Table[]; role: Role }>("GET", `/api/bases/${id}`),
+  base: (id: string) => call<{ base: Base; tables: Table[]; role: Role; guest: boolean }>("GET", `/api/bases/${id}`),
+  baseSharing: (baseId: string) => call<BaseSharing>("GET", `/api/bases/${baseId}/sharing`),
+  inviteToBase: (baseId: string, email: string, role: Role) =>
+    call<{ invite: { id: string; email: string; role: Role; token: string; path: string; emailed: boolean } }>(
+      "POST", `/api/bases/${baseId}/invites`, { email, role }),
+  cancelBaseInvite: (baseId: string, inviteId: string) => call("DELETE", `/api/bases/${baseId}/invites/${inviteId}`),
+  setBaseMemberRole: (baseId: string, userId: string, role: Role) => call("PATCH", `/api/bases/${baseId}/members/${userId}`, { role }),
+  removeBaseMember: (baseId: string, userId: string) => call("DELETE", `/api/bases/${baseId}/members/${userId}`),
+  setRecordAccess: (tableId: string, recordAccess: EditAccess) => call("PATCH", `/api/tables/${tableId}`, { recordAccess }),
 
   members: (wsId: string) => call<{ members: Member[]; invites: PendingInvite[]; myRole: Role }>("GET", `/api/workspaces/${wsId}/members`),
   invite: (wsId: string, email: string, role: Role) =>
@@ -100,8 +121,9 @@ export const api = {
   cancelInvite: (wsId: string, inviteId: string) => call("DELETE", `/api/workspaces/${wsId}/invites/${inviteId}`),
   setMemberRole: (wsId: string, userId: string, role: Role) => call("PATCH", `/api/workspaces/${wsId}/members/${userId}`, { role }),
   removeMember: (wsId: string, userId: string) => call("DELETE", `/api/workspaces/${wsId}/members/${userId}`),
-  inviteInfo: (token: string) => call<{ email: string; role: Role; workspace: string; invitedBy: string | null }>("GET", `/api/invites/${token}`),
-  acceptInvite: (token: string) => call<{ workspaceId: string }>("POST", `/api/invites/${token}/accept`, {}),
+  inviteInfo: (token: string) =>
+    call<{ email: string; role: Role; workspace: string; base: string | null; invitedBy: string | null }>("GET", `/api/invites/${token}`),
+  acceptInvite: (token: string) => call<{ workspaceId: string; baseId: string | null }>("POST", `/api/invites/${token}/accept`, {}),
 
   viewShare: (viewId: string) => call<{ share: { token: string; enabled: boolean } | null }>("GET", `/api/views/${viewId}/share`),
   enableShare: (viewId: string, regenerate = false) =>

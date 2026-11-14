@@ -87,6 +87,8 @@ export const fieldOptionsSchema = z
     /** formula: uses TODAY()/NOW(), so it is refreshed daily; computedOn is the last refresh day. */
     volatile: z.boolean().optional(),
     computedOn: z.string().optional(),
+    /** Who may edit this field's values: everyone who can edit (default), workspace team only, or creators only. */
+    editAccess: z.enum(["all", "team", "creators"]).optional(),
   })
   .default({});
 export type FieldOptions = z.infer<typeof fieldOptionsSchema>;

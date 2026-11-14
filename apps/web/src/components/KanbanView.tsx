@@ -65,7 +65,7 @@ export function KanbanView({ ctx }: { ctx: ViewContext }) {
                 <div
                   key={r.id}
                   className={"card" + (dragId === r.id ? " dragging" : "")}
-                  draggable={ctx.canEdit}
+                  draggable={ctx.canEditField(stackField)}
                   onDragStart={(e) => { setDragId(r.id); e.dataTransfer.effectAllowed = "move"; }}
                   onDragEnd={() => { setDragId(null); setOver(null); }}
                   onClick={() => ctx.openRecord(r.id)}
@@ -94,7 +94,7 @@ export function KanbanView({ ctx }: { ctx: ViewContext }) {
                 </div>
               ))}
             </div>
-            {ctx.canEdit && <button
+            {ctx.canAddRecords && (s.id === NONE || ctx.canEditField(stackField)) && <button
               className="kanban-add"
               onClick={async () => {
                 const rec = await ctx.addRecord(s.id === NONE ? {} : { [stackField.id]: s.id });

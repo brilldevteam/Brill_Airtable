@@ -27,7 +27,7 @@ import {
 } from "@brill/shared";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { baseAccess, fieldTableId, recordTableId, tableAccess, viewTableId, workspaceAccess } from "./access";
+import { baseAccess, fieldTableId, recordTableId, tableAccess, viewTableId, workspaceAccess, checkFieldEdits, checkRecordAccess, EDIT_ACCESS, type EditAccess } from "./access";
 import { buildViewQuery } from "./viewQuery";
 import { requireUser } from "./auth";
 import type { Db } from "./db";
@@ -43,6 +43,7 @@ export const toField = (r: any): Field => ({
 });
 const toTable = (r: any): Table => ({
   id: r.id, baseId: r.base_id, name: r.name, primaryFieldId: r.primary_field_id, position: r.position,
+  recordAccess: r.record_access ?? "all",
 });
 const toView = (r: any): View => ({
   id: r.id, tableId: r.table_id, name: r.name, type: r.type, position: r.position,
@@ -181,6 +182,14 @@ async function loadViews(db: Db, tableId: string): Promise<View[]> {
   return rows.map(toView);
 }
 
+/** Store (or keep) who may edit a field's values; it lives in the field's options. */
+async function setEditAccess(db: Db, field: Field, rule: EditAccess | undefined): Promise<Field> {
+  if (!rule || (field.options.editAccess ?? "all") === rule) return field;
+  return toField(await db.one(
+    `UPDATE fields SET options = options || jsonb_build_object('editAccess', $2::text) WHERE id=$1 RETURNING *`, [field.id, rule],
+  ));
+}
+
 export function registerRoutes(app: FastifyInstance, db: Db) {
   // ================= Workspaces & bases =================
   app.get("/api/workspaces", async (req) => {
@@ -196,7 +205,16 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
        WHERE m.user_id = $1 ORDER BY b.created_at`,
       [user.id],
     );
-    return { workspaces, bases };
+    // Bases someone shared with this user directly (e.g. a client), outside their own workspaces.
+    const sharedBases = await db.query(
+      `SELECT b.id, b.workspace_id AS "workspaceId", b.name, b.color, bm.role, w.name AS "workspaceName"
+       FROM base_members bm JOIN bases b ON b.id = bm.base_id JOIN workspaces w ON w.id = b.workspace_id
+       WHERE bm.user_id = $1
+         AND NOT EXISTS (SELECT 1 FROM workspace_members m WHERE m.workspace_id = b.workspace_id AND m.user_id = $1)
+       ORDER BY bm.created_at`,
+      [user.id],
+    );
+    return { workspaces, bases, sharedBases };
   });
 
   app.post("/api/workspaces/:wsId/bases", async (req) => {
@@ -237,15 +255,12 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
   app.get("/api/bases/:baseId", async (req) => {
     const user = requireUser(req);
     const { baseId } = req.params as { baseId: string };
-    await baseAccess(db, user.id, baseId, "read");
+    const access = await baseAccess(db, user.id, baseId, "read");
     const base = await db.one(`SELECT id, workspace_id AS "workspaceId", name, color FROM bases WHERE id=$1`, [baseId]);
     const tables = (await db.query(`SELECT * FROM tables WHERE base_id=$1 ORDER BY position, id`, [baseId])).map(toTable);
     // The client uses the role to hide controls the user isn't allowed to use (the server still checks).
-    const role = await db.one<{ role: string }>(
-      `SELECT m.role FROM workspace_members m WHERE m.workspace_id=$1 AND m.user_id=$2`,
-      [base.workspaceId, user.id],
-    );
-    return { base, tables, role: role?.role ?? "read" };
+    // "guest" = invited to this base only (e.g. a client), not a member of the workspace.
+    return { base, tables, role: access.role, guest: access.guest };
   });
 
   app.post("/api/bases/:baseId/tables", async (req) => {
@@ -260,9 +275,11 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
   app.patch("/api/tables/:tableId", async (req) => {
     const user = requireUser(req);
     const { tableId } = req.params as { tableId: string };
-    const body = z.object({ name: nameSchema }).parse(req.body);
+    const body = z.object({ name: nameSchema.optional(), recordAccess: z.enum(EDIT_ACCESS).optional() }).parse(req.body);
     await tableAccess(db, user.id, tableId, "creator");
-    await db.query(`UPDATE tables SET name=$2 WHERE id=$1`, [tableId, body.name]);
+    await db.query(`UPDATE tables SET name=COALESCE($2,name), record_access=COALESCE($3,record_access) WHERE id=$1`, [
+      tableId, body.name ?? null, body.recordAccess ?? null,
+    ]);
     return { ok: true };
   });
 
@@ -478,9 +495,11 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
   app.post("/api/tables/:tableId/fields", async (req) => {
     const user = requireUser(req);
     const { tableId } = req.params as { tableId: string };
-    const body = z.object({ name: nameSchema, type: z.enum(FIELD_TYPES), options: fieldOptionsInput }).parse(req.body);
+    const body = z
+      .object({ name: nameSchema, type: z.enum(FIELD_TYPES), options: fieldOptionsInput, editAccess: z.enum(EDIT_ACCESS).optional() })
+      .parse(req.body);
     await tableAccess(db, user.id, tableId, "creator");
-    const field = await db.tx(async (t) => {
+    const created = await db.tx(async (t) => {
       const dup = await t.one(`SELECT 1 FROM fields WHERE table_id=$1 AND name=$2`, [tableId, body.name]);
       if (dup) throw new HttpError(409, `A field named "${body.name}" already exists`);
       const schema = new Schema(t);
@@ -508,6 +527,7 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
       if (COMPUTED_TYPES.has(body.type)) await recomputeField(t, new Schema(t), created);
       return created;
     });
+    const field = await setEditAccess(db, created, body.editAccess);
     return { field };
   });
 
@@ -515,12 +535,13 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
     const user = requireUser(req);
     const { fieldId } = req.params as { fieldId: string };
     const body = z
-      .object({ name: nameSchema.optional(), type: z.enum(FIELD_TYPES).optional(), options: fieldOptionsInput })
+      .object({ name: nameSchema.optional(), type: z.enum(FIELD_TYPES).optional(), options: fieldOptionsInput, editAccess: z.enum(EDIT_ACCESS).optional() })
       .parse(req.body);
     const tableId = await fieldTableId(db, fieldId);
     await tableAccess(db, user.id, tableId, "creator");
+    const before = await db.one<{ rule: string | null }>(`SELECT options->>'editAccess' AS rule FROM fields WHERE id=$1`, [fieldId]);
 
-    const field = await db.tx(async (t) => {
+    const changed = await db.tx(async (t) => {
       const old = toField(await t.one(`SELECT * FROM fields WHERE id=$1`, [fieldId]));
       const table = await t.one<{ primary_field_id: string }>(`SELECT primary_field_id FROM tables WHERE id=$1`, [tableId]);
       const type = body.type ?? old.type;
@@ -584,6 +605,7 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
       if (type !== old.type) await refreshFormulasUsing(t, tableId, fieldId);
       return saved;
     });
+    const field = await setEditAccess(db, changed, body.editAccess ?? (before?.rule as EditAccess | null) ?? undefined);
     return { field };
   });
 
@@ -626,9 +648,11 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
     const user = requireUser(req);
     const { tableId } = req.params as { tableId: string };
     const body = z.object({ cells: z.record(z.unknown()).default({}) }).parse(req.body ?? {});
-    await tableAccess(db, user.id, tableId, "editor");
+    const access = await tableAccess(db, user.id, tableId, "editor");
+    await checkRecordAccess(db, access, tableId, "add");
     const record = await db.tx(async (t) => {
       const cells = await prepareCells(t, tableId, body.cells);
+      await checkFieldEdits(t, access, tableId, Object.keys(cells));
       const id = newId("rec");
       await t.query(`INSERT INTO records (id, table_id, cells, created_by, updated_by) VALUES ($1,$2,'{}',$3,$3)`, [id, tableId, user.id]);
       const schema = new Schema(t);
@@ -645,9 +669,10 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
     const { recordId } = req.params as { recordId: string };
     const body = z.object({ cells: z.record(z.unknown()) }).parse(req.body);
     const tableId = await recordTableId(db, recordId);
-    await tableAccess(db, user.id, tableId, "editor");
+    const access = await tableAccess(db, user.id, tableId, "editor");
     const record = await db.tx(async (t) => {
       const patch = await prepareCells(t, tableId, body.cells);
+      await checkFieldEdits(t, access, tableId, Object.keys(patch));
       await writeCells(t, new Schema(t), user.id, tableId, recordId, patch);
       return toRecord(await t.one(`SELECT * FROM records WHERE id=$1`, [recordId]));
     });
@@ -658,7 +683,8 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
     const user = requireUser(req);
     const { recordId } = req.params as { recordId: string };
     const tableId = await recordTableId(db, recordId);
-    await tableAccess(db, user.id, tableId, "editor");
+    const access = await tableAccess(db, user.id, tableId, "editor");
+    await checkRecordAccess(db, access, tableId, "delete");
     await db.tx(async (t) => {
       // Soft delete: kept for the trash / restore feature. Links to it are removed.
       await t.query(`UPDATE records SET deleted_at=now(), updated_by=$2 WHERE id=$1`, [recordId, user.id]);
