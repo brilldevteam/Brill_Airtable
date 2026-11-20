@@ -309,6 +309,10 @@ async function main() {
     sorts: [{ fieldId: f.get("Due date")!.id, direction: "asc" }],
     hiddenFieldIds: ["Brief", "Cover", "Client city", "Team"].map((n) => f.get(n)!.id),
   }));
+  await addView(projectsT, "By stage", "grid", (f) => ({
+    groupBy: [{ fieldId: f.get("Status")!.id, direction: "asc" }],
+    summaries: { [f.get("Budget")!.id]: "sum", [f.get("Progress")!.id]: "avg", [f.get("Client rating")!.id]: "avg", [f.get("Due date")!.id]: "earliest" },
+  }));
   await addView(projectsT, "Pipeline", "kanban", (f) => ({ stackFieldId: f.get("Status")!.id, coverFieldId: f.get("Cover")!.id }));
   await addView(projectsT, "Deadlines", "calendar", (f) => ({ dateFieldId: f.get("Due date")!.id, colorFieldId: f.get("Status")!.id }));
   await addView(projectsT, "Portfolio", "gallery", (f) => ({
@@ -339,6 +343,10 @@ async function main() {
     filters: { conjunction: "and", conditions: [{ id: "c1", fieldId: f.get("Done")!.id, operator: "isNotChecked" }] },
     sorts: [{ fieldId: f.get("Due")!.id, direction: "asc" }],
   }));
+  await addView(tasksT, "By owner", "grid", (f) => ({
+    groupBy: [{ fieldId: f.get("Owner")!.id, direction: "asc" }, { fieldId: f.get("Done")!.id, direction: "asc" }],
+    summaries: { [f.get("Hours")!.id]: "sum", [f.get("Time spent")!.id]: "sum", [f.get("Done")!.id]: "percentChecked" },
+  }));
   await addView(tasksT, "Board", "kanban", (f) => ({ stackFieldId: f.get("Status")!.id }));
   await addView(tasksT, "By priority", "kanban", (f) => ({ stackFieldId: f.get("Priority")!.id }));
   await addView(tasksT, "Schedule", "calendar", (f) => ({ dateFieldId: f.get("Due")!.id, colorFieldId: f.get("Priority")!.id }));
@@ -346,7 +354,10 @@ async function main() {
   await call("PATCH", `/api/views/${clientsGrid}`, { name: "All clients" });
   await addView(clientsT, "Client wall", "gallery", (f) => ({ coverFieldId: f.get("Logo")!.id, coverFit: "cover", cardSize: "small" }));
 
-  await call("PATCH", `/api/views/${invoicesGrid}`, { name: "All invoices" });
+  await call("PATCH", `/api/views/${invoicesGrid}`, {
+    name: "All invoices",
+    config: { ...(await call("GET", `/api/tables/${invoicesT}`)).views[0].config, summaries: { [(await fieldsOf(invoicesT)).find((x) => x.name === "Amount")!.id]: "sum" } },
+  });
   await addView(invoicesT, "Unpaid", "grid", (f) => ({
     filters: { conjunction: "and", conditions: [{ id: "c1", fieldId: f.get("Status")!.id, operator: "isAnyOf", value: ["Sent", "Overdue"].map((n) => choiceId(f.get("Status")!, n)) }] },
     sorts: [{ fieldId: f.get("Due")!.id, direction: "asc" }],

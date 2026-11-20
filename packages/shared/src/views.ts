@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { effectiveType, type Field, type FieldType } from "./fields";
+import { SUMMARY_KINDS } from "./summary";
 
 export const VIEW_TYPES = ["grid", "kanban", "calendar", "gallery", "form"] as const;
 export type ViewType = (typeof VIEW_TYPES)[number];
@@ -97,6 +98,10 @@ export const viewConfigSchema = z.object({
     })
     .default({}),
   sorts: z.array(sortSchema).max(10).default([]),
+  /** Grid: group records by up to 3 fields (outermost first). */
+  groupBy: z.array(sortSchema).max(3).default([]),
+  /** Grid: summary shown under each column (and in group headers), by field id. */
+  summaries: z.record(z.enum(SUMMARY_KINDS)).default({}),
   hiddenFieldIds: z.array(z.string()).default([]),
   fieldOrder: z.array(z.string()).default([]),
   columnWidths: z.record(z.number().min(40).max(1000)).default({}),

@@ -11,7 +11,7 @@ import {
   type FilterOperator,
   type SortSpec,
 } from "@brill/shared";
-import { ArrowDownUp, CalendarDays, Check, Globe, Image as ImageIcon, Maximize, Palette, Download, EyeOff, FileUp, Kanban, ListFilter, MoreHorizontal, Plus, Rows3, Search, X } from "lucide-react";
+import { ArrowDownUp, CalendarDays, Check, ListTree, Globe, Image as ImageIcon, Maximize, Palette, Download, EyeOff, FileUp, Kanban, ListFilter, MoreHorizontal, Plus, Rows3, Search, X } from "lucide-react";
 import { api } from "../api";
 import { ImportCsvDialog } from "./ImportCsvDialog";
 import { ShareLinkDialog } from "./ShareLinkDialog";
@@ -22,7 +22,7 @@ import type { ViewContext } from "./TableWorkspace";
 import { ViewIcon } from "./ViewSidebar";
 import { useCollaborators } from "./PeoplePicker";
 
-type Panel = "hide" | "filter" | "sort" | "height" | "stack" | "more" | "date" | "color" | "cover" | "size";
+type Panel = "hide" | "filter" | "sort" | "group" | "height" | "stack" | "more" | "date" | "color" | "cover" | "size";
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
 export function ViewToolbar({ ctx, recordCount, loading }: { ctx: ViewContext; recordCount: number; loading: boolean }) {
@@ -39,6 +39,7 @@ export function ViewToolbar({ ctx, recordCount, loading }: { ctx: ViewContext; r
   const hiddenCount = cfg.hiddenFieldIds.filter((id) => allFields.some((f) => f.id === id && f.id !== ctx.primaryFieldId)).length;
   const filterCount = cfg.filters.conditions.length;
   const sortCount = cfg.sorts.length;
+  const groupCount = cfg.groupBy.length;
   const stackField = allFields.find((f) => f.id === cfg.stackFieldId);
   const dateField = allFields.find((f) => f.id === cfg.dateFieldId && isDateLike(f));
   const colorField = allFields.find((f) => f.id === cfg.colorFieldId);
@@ -98,6 +99,11 @@ export function ViewToolbar({ ctx, recordCount, loading }: { ctx: ViewContext; r
         <ArrowDownUp size={15} /> <span className="tool-label">{sortCount ? `Sorted by ${plural(sortCount, "field")}` : "Sort"}</span>
       </button>
       {view.type === "grid" && (
+        <button className={"tool" + (groupCount ? " active-group" : "")} title="Group" onClick={toggle("group")}>
+          <ListTree size={15} /> <span className="tool-label">{groupCount ? `Grouped by ${plural(groupCount, "field")}` : "Group"}</span>
+        </button>
+      )}
+      {view.type === "grid" && (
         <button className="tool" title="Row height" onClick={toggle("height")}><Rows3 size={15} /> <span className="tool-label">Row height</span></button>
       )}
       <div className="spacer" />
@@ -123,6 +129,7 @@ export function ViewToolbar({ ctx, recordCount, loading }: { ctx: ViewContext; r
           {open.panel === "hide" && <HideFields ctx={ctx} />}
           {open.panel === "filter" && <FilterEditor ctx={ctx} />}
           {open.panel === "sort" && <SortEditor ctx={ctx} />}
+          {open.panel === "group" && <GroupEditor ctx={ctx} />}
           {open.panel === "height" && (
             <div className="menu">
               <div className="menu-label">Row height</div>
@@ -397,6 +404,48 @@ function DebouncedInput({ value, onChange, type }: { value: string; onChange: (v
         setTimer(window.setTimeout(() => onChange(s), 300));
       }}
     />
+  );
+}
+
+/** Group a grid by up to 3 fields; records keep the view's sort inside each group. */
+function GroupEditor({ ctx }: { ctx: ViewContext }) {
+  const { allFields, view, updateConfig } = ctx;
+  const groups = view.config.groupBy;
+  const set = (next: SortSpec[]) => updateConfig({ groupBy: next });
+  const used = new Set(groups.map((g) => g.fieldId));
+  // Attachments and long text make poor groups.
+  const groupable = allFields.filter((f) => f.type !== "attachment" && f.type !== "longText");
+  return (
+    <div className="panel">
+      <div className="panel-title">Group records</div>
+      {groups.length === 0 && <div className="panel-empty">Not grouped. Pick a field — e.g. Status, Client or Assignee — to group records by it.</div>}
+      {groups.map((g, i) => {
+        const f = allFields.find((x) => x.id === g.fieldId);
+        return (
+          <div key={i} className="filter-row">
+            <span className="group-level">{i === 0 ? "Group by" : "then by"}</span>
+            <select value={g.fieldId} onChange={(e) => set(groups.map((x, j) => (j === i ? { ...x, fieldId: e.target.value } : x)))}>
+              {!f && <option value={g.fieldId}>(deleted field)</option>}
+              {groupable.filter((x) => x.id === g.fieldId || !used.has(x.id)).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+            </select>
+            <select value={g.direction} onChange={(e) => set(groups.map((x, j) => (j === i ? { ...x, direction: e.target.value as "asc" | "desc" } : x)))}>
+              <option value="asc">{f?.type === "singleSelect" ? "First → Last" : "A → Z, 1 → 9"}</option>
+              <option value="desc">{f?.type === "singleSelect" ? "Last → First" : "Z → A, 9 → 1"}</option>
+            </select>
+            <button className="icon-btn" title="Remove group" onClick={() => set(groups.filter((_, j) => j !== i))}><X size={15} /></button>
+          </div>
+        );
+      })}
+      <div className="panel-actions">
+        {groups.length < 3 && groupable.some((f) => !used.has(f.id)) && (
+          <button className="link" onClick={() => set([...groups, { fieldId: groupable.find((f) => !used.has(f.id))!.id, direction: "asc" }])}>
+            <Plus size={14} /> Add {groups.length ? "subgroup" : "group"}
+          </button>
+        )}
+        {groups.length > 0 && <button className="link" onClick={() => set([])}>Remove grouping</button>}
+      </div>
+      <div className="panel-note">Click a group's header to collapse or expand it. Pick totals for each column in the bar under the grid.</div>
+    </div>
   );
 }
 

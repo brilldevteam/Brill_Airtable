@@ -118,6 +118,18 @@ describe("view sorts", () => {
   it("text case-insensitively", async () => {
     expect(await names({ sorts: [{ fieldId: F.Name.id, direction: "asc" }] })).toEqual(["Banner", "Flyers", "Logo", "website"]);
   });
+  it("groups come first, then the view's sorts inside each group", async () => {
+    const r = await names({
+      groupBy: [{ fieldId: F.Paid.id, direction: "desc" }],
+      sorts: [{ fieldId: F.Price.id, direction: "desc" }],
+      summaries: { [F.Price.id]: "sum" },
+    });
+    // Paid first (Banner), then the unpaid ones by price, highest first.
+    expect(r).toEqual(["Banner", "website", "Flyers", "Logo"]);
+    const v = (await call("GET", `/api/tables/${tableId}`)).views.find((x: any) => x.id === viewId);
+    expect(v.config.summaries[F.Price.id]).toBe("sum");
+    await call("PATCH", `/api/views/${viewId}`, { config: { groupBy: [], summaries: {} } });
+  });
 });
 
 describe("views CRUD", () => {

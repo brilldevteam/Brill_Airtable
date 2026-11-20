@@ -18,6 +18,7 @@ Works today:
   - **Filter** with AND/OR conditions and type-aware operators (contains, is, =, <, is any of, has all of, is before/after, today/tomorrow…); runs on the server as SQL
   - **Sort** by several fields (select fields sort in option order, empty values last)
   - **Hide fields**, drag to **reorder columns**, **resize columns**, **row height** — all saved per view
+  - **Group** a grid by up to 3 fields (click a group header to collapse it), and a **summary bar** under the grid: Sum, Average, Median, Min, Max, Range, Earliest/Latest, Filled/Empty/Unique, Percent checked… per column. Group headers show the same totals for each group.
 - **Kanban view**: cards stacked by a single select field, drag between stacks, add a card in a stack
 - **Calendar view**: month grid (weeks start Monday) placed by a date field (or date formula); drag events to reschedule (time of day is kept), click a day's + to add a record there, colour events by a single select, "+N more" for busy days, and a side panel of records without a date that you can drag onto the calendar.
 - **Gallery view**: cards with a cover from an attachment field (images, or the first frame of a video), crop or fit, small/medium/large cards, and the view's visible fields.
@@ -40,7 +41,7 @@ Works today:
 - **Shared views**: any other view can be shared read-only (⋯ → Share view) at `/v/<token>` — only that view's visible fields, with its filters; images and files from visible attachment fields load through the link. Creators/owners can make a new link (the old one stops working) or turn it off.
 - **Record activity**: the record popup has **Comments** and **History** (who changed which field, from what to what, and when).
 
-Not yet: group-by in the grid, automations, interfaces (dashboards), trash / restore of deleted records. Link fields can only be filtered by "is empty / is not empty" for now. These follow the phases in the plan.
+Not yet: automations, interfaces (dashboards), trash / restore of deleted records. Link fields can only be filtered by "is empty / is not empty" for now. These follow the phases in the plan.
 
 ## Requirements
 

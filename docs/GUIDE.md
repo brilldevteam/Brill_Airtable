@@ -87,6 +87,16 @@ The left sidebar lists the table's views. Create one of five kinds; each keeps i
 | **Gallery** | Cards with a cover image from an attachment field. | Projects → Portfolio; Clients → Client wall |
 | **Form** | A form anyone can fill in. Each answer becomes a record. | Projects → New project request |
 
+**Grouping and totals (grid views).**
+- **Group** (in the toolbar) groups records by a field, such as Status, Client or Assignee. You can group by up to 3 fields, for example Owner and then Done.
+- Each group has a header row with its name and how many records it holds. Click the header to collapse or expand the group; your browser remembers this.
+- The **bar under the grid** summarises each column. Click a column's cell in the bar and pick:
+  - **Sum**, **Average**, **Median**, **Min**, **Max** or **Range** for numbers and money;
+  - **Earliest**, **Latest** or **Range (days)** for dates;
+  - **Checked** or **Percent checked** for checkboxes;
+  - **Filled**, **Empty** or **Unique** for any field.
+- Group headers show the same totals for each group. Try Projects → "By stage" and Tasks → "By owner" in the demo.
+
 The toolbar on every view has **Filter** (AND/OR conditions with type-aware operators), **Sort** (several levels), **Hide fields** and **Row height**. Filters and sorts run on the server.
 
 ## 8. Attachments
@@ -156,10 +166,10 @@ Browser (React + Vite)            API (Node + Fastify)                Storage
   - URL fetches are protected against SSRF.
   - Spreadsheet exports are protected against formula injection.
 - **Quality:**
-  - `pnpm test` runs 115 automated tests across API and engine.
+  - `pnpm test` runs 119 automated tests across API and engine.
   - `pnpm typecheck` checks types across the whole project.
   - `pnpm seed:demo` exercises the HTTP API end to end.
 
 ## 13. What isn't built yet
 
-Group-by in the grid, automations, interfaces (dashboards), trash and restore, undo, Google sign-in, two-factor sign-in, record paging for very large tables, and production hosting. [SAAS_PLAN.md](../SAAS_PLAN.md) covers these and the move to a SaaS product.
+Automations, interfaces (dashboards), trash and restore, undo, Google sign-in, two-factor sign-in, record paging for very large tables, and production hosting. [SAAS_PLAN.md](../SAAS_PLAN.md) covers these and the move to a SaaS product.

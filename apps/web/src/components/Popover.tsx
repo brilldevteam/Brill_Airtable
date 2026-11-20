@@ -1,6 +1,6 @@
 import type { CellValue, Field } from "@brill/shared";
 import { Check } from "lucide-react";
-import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { CHOICE_COLORS } from "../colors";
 
 export interface Anchor { x: number; y: number; width: number; height: number }
@@ -18,11 +18,22 @@ export function Popover({ anchor, onClose, children, minWidth = 200, cover = fal
   className?: string;
 }) {
   const left = Math.max(8, Math.min(anchor.x, window.innerWidth - minWidth - 16));
+  const below = cover ? anchor.y - 1 : anchor.y + anchor.height + 4;
+  const ref = useRef<HTMLDivElement>(null);
+  const [top, setTop] = useState(below);
+  // Open upwards when there isn't room below (e.g. menus on the summary bar).
+  useLayoutEffect(() => {
+    const h = ref.current?.offsetHeight ?? 0;
+    if (!cover && below + h > window.innerHeight - 8 && anchor.y - h - 4 >= 8) setTop(anchor.y - h - 4);
+    else if (below + h > window.innerHeight - 8) setTop(Math.max(8, window.innerHeight - h - 8));
+    else setTop(below);
+  }, [below, anchor.y, cover]);
   return (
     <div className="popover-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
+        ref={ref}
         className={"popover " + className}
-        style={{ left: cover ? Math.max(8, Math.min(anchor.x - 1, window.innerWidth - minWidth - 16)) : left, top: cover ? anchor.y - 1 : anchor.y + anchor.height + 4, minWidth: Math.max(anchor.width, minWidth), maxWidth: "calc(100vw - 16px)" }}
+        style={{ left: cover ? Math.max(8, Math.min(anchor.x - 1, window.innerWidth - minWidth - 16)) : left, top, minWidth: Math.max(anchor.width, minWidth), maxWidth: "calc(100vw - 16px)" }}
       >
         {children}
       </div>

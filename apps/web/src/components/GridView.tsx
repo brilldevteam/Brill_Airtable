@@ -9,16 +9,19 @@ import {
   type GridSelection,
   type Item,
 } from "@glideapps/glide-data-grid";
-import { cellToText, COMPUTED_TYPES, FIELD_TYPE_LABELS, orderedFieldIds, type CellValue, type Field } from "@brill/shared";
-import { useCallback, useMemo, useRef, useState } from "react";
-import { ArrowDownWideNarrow, ArrowUpNarrowWide, EyeOff, Maximize2, Pencil, Plus, Trash2, X } from "lucide-react";
+import {
+  cellToText, COMPUTED_TYPES, FIELD_TYPE_LABELS, groupKey, isNumericField, orderedFieldIds, summarize, SUMMARY_LABELS, summaryKindsFor,
+  type CellValue, type Field, type LinkLabels, type RecordRow, type SummaryKind,
+} from "@brill/shared";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, Check, EyeOff, Maximize2, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useDialogs } from "./Dialogs";
 import { CUSTOM_HEADER_ICONS, GRID_ICONS } from "./fieldIcons";
 import { AttachmentStrip, AttachmentTiles } from "./AttachmentPicker";
 import { gridBadge } from "./attachmentUtils";
 import { LinkPicker } from "./LinkPicker";
 import { RatingInput, UserPicker } from "./PeoplePicker";
-import { Popover, SelectPicker, type Anchor } from "./Popover";
+import { Popover, SelectPicker, anchorOf, type Anchor } from "./Popover";
 import type { ViewContext } from "./TableWorkspace";
 
 export const TYPE_ICON: Record<string, string> = {
@@ -54,10 +57,110 @@ function drawStars(ctx: CanvasRenderingContext2D, rect: { x: number; y: number; 
 }
 const emptySelection: GridSelection = { columns: CompactSelection.empty(), rows: CompactSelection.empty() };
 
+// ---------------- grouping ----------------
+type GroupRow = { kind: "group"; depth: number; path: string; label: string; fieldName: string; recs: RecordRow[] };
+type DisplayRow = { kind: "rec"; rec: RecordRow } | GroupRow;
+const GROUP_BG = ["#f1f1f5", "#f6f6f9", "#fafafc"];
+
+/** Records in view order, with a header row before each group (and nested groups inside). */
+function buildRows(recs: RecordRow[], groupFields: Field[], collapsed: Set<string>, labels: LinkLabels, depth = 0, parent = ""): DisplayRow[] {
+  if (depth >= groupFields.length) return recs.map((rec) => ({ kind: "rec", rec }));
+  const f = groupFields[depth];
+  const groups = new Map<string, { label: string; recs: RecordRow[] }>();
+  for (const r of recs) {
+    const [key, label] = groupKey(f, r.cells[f.id] ?? null, labels);
+    const g = groups.get(key) ?? { label, recs: [] };
+    g.recs.push(r);
+    groups.set(key, g);
+  }
+  const out: DisplayRow[] = [];
+  for (const [key, g] of groups) {
+    const path = `${parent}/${f.id}:${key}`;
+    out.push({ kind: "group", depth, path, label: g.label, fieldName: f.name, recs: g.recs });
+    if (!collapsed.has(path)) out.push(...buildRows(g.recs, groupFields, collapsed, labels, depth + 1, path));
+  }
+  return out;
+}
+
+const FONT = '"Instrument Sans", ui-sans-serif, system-ui, sans-serif';
+function fit(ctx: CanvasRenderingContext2D, text: string, max: number) {
+  if (ctx.measureText(text).width <= max) return text;
+  let t = text;
+  while (t.length > 1 && ctx.measureText(t + "…").width > max) t = t.slice(0, -1);
+  return t + "…";
+}
+
+/** First cell of a group header row: chevron, field name, value and a count. */
+function drawGroupHeader(ctx: CanvasRenderingContext2D, rect: { x: number; y: number; width: number; height: number }, g: GroupRow, isCollapsed: boolean) {
+  ctx.save();
+  const cy = rect.y + rect.height / 2;
+  let x = rect.x + 10 + g.depth * 14;
+  // chevron
+  ctx.strokeStyle = "#71717a";
+  ctx.lineWidth = 1.6;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  if (isCollapsed) { ctx.moveTo(x + 2, cy - 4); ctx.lineTo(x + 6, cy); ctx.lineTo(x + 2, cy + 4); }
+  else { ctx.moveTo(x, cy - 2); ctx.lineTo(x + 4, cy + 2); ctx.lineTo(x + 8, cy - 2); }
+  ctx.stroke();
+  x += 16;
+  const right = rect.x + rect.width - 8;
+  ctx.textBaseline = "middle";
+  ctx.font = `500 11px ${FONT}`;
+  ctx.fillStyle = "#8b8b95";
+  const name = fit(ctx, g.fieldName.toUpperCase(), Math.max(0, right - x - 60));
+  ctx.fillText(name, x, cy - 7);
+  ctx.font = `600 13px ${FONT}`;
+  ctx.fillStyle = g.label === "(Empty)" ? "#8b8b95" : "#18181b";
+  const count = String(g.recs.length);
+  ctx.font = `600 11px ${FONT}`;
+  const pillW = ctx.measureText(count).width + 12;
+  ctx.font = `600 13px ${FONT}`;
+  const label = fit(ctx, g.label, Math.max(0, right - x - pillW - 8));
+  ctx.fillText(label, x, cy + 7);
+  const lw = ctx.measureText(label).width;
+  // count pill
+  const px = x + lw + 8;
+  ctx.fillStyle = "#e4e4e9";
+  ctx.beginPath();
+  ctx.roundRect(px, cy + 7 - 8, pillW, 16, 8);
+  ctx.fill();
+  ctx.font = `600 11px ${FONT}`;
+  ctx.fillStyle = "#52525b";
+  ctx.fillText(count, px + 6, cy + 7.5);
+  ctx.restore();
+}
+
+/** Other cells of a group header row: that column's summary for the group. */
+function drawGroupSummary(ctx: CanvasRenderingContext2D, rect: { x: number; y: number; width: number; height: number }, label: string, value: string, right: boolean) {
+  if (!value) return;
+  ctx.save();
+  ctx.textBaseline = "middle";
+  const cy = rect.y + rect.height / 2;
+  ctx.font = `600 12.5px ${FONT}`;
+  const v = fit(ctx, value, rect.width - 20);
+  const vw = ctx.measureText(v).width;
+  ctx.font = `500 10.5px ${FONT}`;
+  const l = label.toUpperCase();
+  const lw = ctx.measureText(l).width;
+  const total = lw + 6 + vw;
+  const x0 = right ? rect.x + rect.width - 10 - total : rect.x + 10;
+  if (total < rect.width - 16) {
+    ctx.fillStyle = "#a1a1aa";
+    ctx.fillText(l, x0, cy + 0.5);
+  }
+  ctx.font = `600 12.5px ${FONT}`;
+  ctx.fillStyle = "#3f3f46";
+  ctx.fillText(v, total < rect.width - 16 ? x0 + lw + 6 : right ? rect.x + rect.width - 10 - vw : rect.x + 10, cy);
+  ctx.restore();
+}
+
 export function GridView({ ctx }: { ctx: ViewContext }) {
   const { fields, records, labels, files, view, primaryFieldId, saveCells, updateConfig } = ctx;
   const cfg = view.config;
   const gridRef = useRef<DataEditorRef>(null);
+  const gridAreaRef = useRef<HTMLDivElement>(null);
   const [selection, setSelection] = useState<GridSelection>(emptySelection);
   const search = ctx.search;
   const dialogs = useDialogs();
@@ -68,11 +171,31 @@ export function GridView({ ctx }: { ctx: ViewContext }) {
   const [liveWidths, setLiveWidths] = useState<Record<string, number>>({});
 
   // Quick search on top of the view's own filters.
-  const rows = useMemo(() => {
+  const visible = useMemo(() => {
     const s = search.trim().toLowerCase();
     if (!s) return records;
     return records.filter((r) => fields.some((f) => cellToText(f, r.cells[f.id] ?? null, labels).toLowerCase().includes(s)));
   }, [records, fields, search, labels]);
+
+  // Grouping: header rows between records. Collapsed groups are remembered per view, in this browser.
+  const groupFields = cfg.groupBy.map((g) => ctx.allFields.find((f) => f.id === g.fieldId)).filter((f): f is Field => !!f);
+  const collapseKey = `brill.grid.collapsed.${view.id}`;
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(collapseKey) ?? "[]")); } catch { return new Set(); }
+  });
+  const toggleGroup = (path: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      try { localStorage.setItem(collapseKey, JSON.stringify([...next])); } catch { /* private mode */ }
+      return next;
+    });
+  };
+  const items = useMemo(() => buildRows(visible, groupFields, collapsed, labels), [visible, cfg.groupBy, ctx.allFields, collapsed, labels]);
+  const grouped = groupFields.length > 0;
+  /** The record on each grid row (undefined for group header rows). */
+  const rows = useMemo(() => items.map((it) => (it.kind === "rec" ? it.rec : undefined)), [items]);
 
   const columns: GridColumn[] = fields.map((f) => ({
     id: f.id,
@@ -84,6 +207,10 @@ export function GridView({ ctx }: { ctx: ViewContext }) {
 
   const getCellContent = useCallback(
     (item: Item): GridCell => {
+      const it = items[item[1]];
+      if (it?.kind === "group") {
+        return { kind: GridCellKind.Text, data: "", displayData: "", allowOverlay: false, readonly: true };
+      }
       const cell = cellFor(item);
       const f = fields[item[0]];
       if (ctx.canEdit && f && ctx.canEditField(f)) return cell;
@@ -91,7 +218,7 @@ export function GridView({ ctx }: { ctx: ViewContext }) {
       if (ctx.canEdit && f && (f.type === "attachment" || f.type === "longText")) return { ...cell, readonly: true } as GridCell;
       return { ...cell, readonly: true, allowOverlay: false } as GridCell;
     },
-    [fields, rows, cfg.rowHeight, labels, files, ctx.canEdit, ctx.canEditField],
+    [fields, rows, items, cfg.rowHeight, labels, files, ctx.canEdit, ctx.canEditField],
   );
   const cellFor = useCallback(
     ([col, row]: Item): GridCell => {
@@ -218,6 +345,8 @@ export function GridView({ ctx }: { ctx: ViewContext }) {
   };
 
   const onCellActivated = ([col, row]: Item) => {
+    const it = items[row];
+    if (it?.kind === "group") return toggleGroup(it.path);
     if (!ctx.canEdit) { const r = rows[row]; if (r) ctx.openRecord(r.id); return; }
     const f = fields[col];
     const r = rows[row];
@@ -254,7 +383,7 @@ export function GridView({ ctx }: { ctx: ViewContext }) {
 
   return (
     <div className="grid-wrap">
-      <div className="grid-area">
+      <div className="grid-area" ref={gridAreaRef}>
         <DataEditor
           ref={gridRef}
           columns={columns}
@@ -266,16 +395,32 @@ export function GridView({ ctx }: { ctx: ViewContext }) {
           getCellsForSelection={true}
           onPaste={true}
           fillHandle={true}
-          rowMarkers="both"
+          rowMarkers={grouped ? "checkbox" : "both"}
+          rowMarkerWidth={grouped ? 40 : 52}
+          onCellClicked={([, row]) => { const it = items[row]; if (it?.kind === "group") toggleGroup(it.path); }}
+          getRowThemeOverride={(row) => {
+            const it = items[row];
+            if (it?.kind !== "group") return undefined;
+            const bg = GROUP_BG[Math.min(it.depth, GROUP_BG.length - 1)];
+            return { bgCell: bg, bgCellMedium: bg };
+          }}
           freezeColumns={1}
           smoothScrollX
           smoothScrollY
           width="100%"
           height="100%"
-          rowHeight={ROW_HEIGHT[cfg.rowHeight]}
+          rowHeight={(row) => (items[row]?.kind === "group" ? 40 : ROW_HEIGHT[cfg.rowHeight])}
           headerHeight={38}
           gridSelection={selection}
-          onGridSelectionChange={setSelection}
+          onGridSelectionChange={(sel) => {
+            // Group header rows can't be selected as records.
+            if (grouped && sel.rows.length) {
+              let rowsSel = sel.rows;
+              items.forEach((it, i) => { if (it.kind === "group" && rowsSel.hasIndex(i)) rowsSel = rowsSel.remove(i); });
+              sel = { ...sel, rows: rowsSel };
+            }
+            setSelection(sel);
+          }}
           onColumnResize={onColumnResize}
           onColumnMoved={onColumnMoved}
           onHeaderMenuClick={(col, bounds) => ctx.canEdit && setFieldMenu({ field: fields[col], anchor: bounds })}
@@ -286,6 +431,16 @@ export function GridView({ ctx }: { ctx: ViewContext }) {
           theme={GRID_THEME}
           headerIcons={CUSTOM_HEADER_ICONS}
           drawCell={(args, drawContent) => {
+            const it = items[args.row];
+            if (it?.kind === "group") {
+              const f = fields[args.col];
+              if (args.col === 0) return drawGroupHeader(args.ctx, args.rect, it, collapsed.has(it.path));
+              const kind = f && cfg.summaries[f.id];
+              if (f && kind && kind !== "none") {
+                drawGroupSummary(args.ctx, args.rect, SUMMARY_LABELS[kind], summarize(f, it.recs.map((r) => r.cells[f.id] ?? null), kind, labels), isNumericField(f));
+              }
+              return;
+            }
             const f = fields[args.col];
             if (f?.type !== "rating") return drawContent();
             const v = rows[args.row]?.cells[f.id];
@@ -293,6 +448,13 @@ export function GridView({ ctx }: { ctx: ViewContext }) {
           }}
         />
       </div>
+      <SummaryBar
+        ctx={ctx}
+        columns={columns}
+        recordsShown={visible}
+        markerWidth={grouped ? 40 : 52}
+        gridWrap={gridAreaRef}
+      />
 
       {expanded && (() => {
         const rec = records.find((r) => r.id === expanded.recordId);
@@ -458,3 +620,94 @@ const GRID_THEME = {
   roundingRadius: 6,
 };
 
+
+/**
+ * The bar under the grid: one summary per column (Sum, Average, Earliest, Filled…), chosen per view.
+ * It's plain HTML kept in line with the grid's columns and horizontal scroll.
+ */
+function SummaryBar({ ctx, columns, recordsShown, markerWidth, gridWrap }: {
+  ctx: ViewContext; columns: GridColumn[]; recordsShown: RecordRow[]; markerWidth: number; gridWrap: RefObject<HTMLDivElement>;
+}) {
+  const { fields, view, updateConfig, labels } = ctx;
+  const [scrollLeft, setScrollLeft] = useState(0);
+  const [menu, setMenu] = useState<{ field: Field; anchor: Anchor } | null>(null);
+  useEffect(() => {
+    // Scroll events don't bubble, but they can be caught on the way down — so this works even
+    // though the grid creates its scroller after we mount.
+    const wrap = gridWrap.current;
+    if (!wrap) return;
+    const on = (e: Event) => {
+      const t = e.target as HTMLElement;
+      if (t.classList?.contains("dvn-scroller")) setScrollLeft(t.scrollLeft);
+    };
+    wrap.addEventListener("scroll", on, { capture: true, passive: true });
+    const el = wrap.querySelector<HTMLElement>(".dvn-scroller");
+    if (el) setScrollLeft(el.scrollLeft);
+    return () => wrap.removeEventListener("scroll", on, { capture: true });
+  }, [gridWrap]);
+
+  const widths = columns.map((c) => ("width" in c ? c.width : 160));
+  const summaries = view.config.summaries;
+  const cell = (f: Field, w: number) => {
+    const kind = summaries[f.id] ?? "none";
+    const value = kind === "none" ? "" : summarize(f, recordsShown.map((r) => r.cells[f.id] ?? null), kind, labels);
+    const num = isNumericField(f);
+    return (
+      <button
+        key={f.id}
+        className={"sb-cell" + (kind === "none" ? " empty" : "") + (num ? " num" : "")}
+        style={{ width: w }}
+        disabled={!ctx.canEdit}
+        title={ctx.canEdit ? `Summarize ${f.name}` : undefined}
+        onClick={(e) => setMenu({ field: f, anchor: anchorOf(e.currentTarget) })}
+      >
+        {kind === "none" ? <span className="sb-hint">Summarize ▾</span> : <><span className="sb-label">{SUMMARY_LABELS[kind]}</span> <b>{value}</b></>}
+      </button>
+    );
+  };
+  const [first, ...rest] = fields;
+  return (
+    <div className="summary-bar">
+      <div className="sb-frozen" style={{ width: markerWidth + (widths[0] ?? 0) }}>
+        <span className="sb-count">{recordsShown.length} {recordsShown.length === 1 ? "record" : "records"}</span>
+        {first && summaries[first.id] && summaries[first.id] !== "none" && (
+          <button className="sb-cell" onClick={(e) => setMenu({ field: first, anchor: anchorOf(e.currentTarget) })}>
+            <span className="sb-label">{SUMMARY_LABELS[summaries[first.id]]}</span>{" "}
+            <b>{summarize(first, recordsShown.map((r) => r.cells[first.id] ?? null), summaries[first.id], labels)}</b>
+          </button>
+        )}
+        {first && (!summaries[first.id] || summaries[first.id] === "none") && ctx.canEdit && (
+          <button className="sb-cell empty" onClick={(e) => setMenu({ field: first, anchor: anchorOf(e.currentTarget) })}><span className="sb-hint">Summarize ▾</span></button>
+        )}
+      </div>
+      {/* The track moves with the grid; never let the browser scroll this strip on its own (e.g. on focus). */}
+      <div className="sb-scroll" onScroll={(e) => { e.currentTarget.scrollLeft = 0; }} onMouseDown={(e) => e.preventDefault()}>
+        <div className="sb-track" style={{ transform: `translateX(${-scrollLeft}px)` }}>
+          {rest.map((f, i) => cell(f, widths[i + 1]))}
+        </div>
+      </div>
+      {menu && (
+        <Popover anchor={menu.anchor} onClose={() => setMenu(null)} minWidth={190}>
+          <div className="menu">
+            <div className="menu-label">Summarize {menu.field.name}</div>
+            {summaryKindsFor(menu.field).map((k: SummaryKind) => (
+              <button
+                key={k}
+                onClick={() => {
+                  const next = { ...summaries };
+                  if (k === "none") delete next[menu.field.id];
+                  else next[menu.field.id] = k;
+                  updateConfig({ summaries: next });
+                  setMenu(null);
+                }}
+              >
+                <span className="check">{(summaries[menu.field.id] ?? "none") === k && <Check size={15} />}</span>
+                {SUMMARY_LABELS[k]}
+              </button>
+            ))}
+          </div>
+        </Popover>
+      )}
+    </div>
+  );
+}

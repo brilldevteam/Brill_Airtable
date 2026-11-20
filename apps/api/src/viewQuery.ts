@@ -24,7 +24,9 @@ export function buildViewQuery(tableId: string, fields: Field[], config: ViewCon
   const where = conditions.length ? ` AND (${conditions.join(joiner)})` : "";
 
   const orderBy: string[] = [];
-  for (const s of config.sorts) {
+  // Grouped grids order by the group fields first, so each group's records come together;
+  // the view's own sorts then order records inside each group.
+  for (const s of [...config.groupBy, ...config.sorts]) {
     const field = byId.get(s.fieldId);
     if (!field) continue;
     orderBy.push(`${sortExpr(field, p)} ${s.direction === "desc" ? "DESC" : "ASC"} NULLS LAST`);
