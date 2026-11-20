@@ -127,9 +127,9 @@ export function BasePage() {
       {automating && <AutomationsPanel baseId={base.id} tables={tables} onClose={() => setAutomating(false)} />}
 
       <nav className="table-tabs">
-        <div className="mode-switch" role="tablist" aria-label="Data or dashboards">
-          <Link role="tab" aria-selected={!dashMode} className={!dashMode ? "on" : ""} to={`/base/${baseId}`}><Sheet size={14} /> Data</Link>
+        <div className="mode-switch" role="tablist" aria-label="Dashboards or data">
           <Link role="tab" aria-selected={dashMode} className={dashMode ? "on" : ""} to={`/base/${baseId}/dash`}><LayoutDashboard size={14} /> Dashboards</Link>
+          <Link role="tab" aria-selected={!dashMode} className={!dashMode ? "on" : ""} to={`/base/${baseId}`}><Sheet size={14} /> Data</Link>
         </div>
         {dashMode && dashboards.map((d) => (
           <Link

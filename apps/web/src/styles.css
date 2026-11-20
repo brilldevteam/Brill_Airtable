@@ -1295,3 +1295,6 @@ a.btn { text-decoration: none; }
 .widget-fields label { font-size: 13px; color: var(--text); gap: 6px; }
 @media (max-width: 1100px) { .dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .dash-grid .widget { grid-column: span 2 !important; } .dash-grid .widget.w-number { grid-column: span 1 !important; } }
 @media (max-width: 640px) { .dash-grid { grid-template-columns: 1fr; padding: 4px 14px; } .dash-grid .widget { grid-column: span 1 !important; } .form-2col { grid-template-columns: 1fr; } .widget-types { grid-template-columns: 1fr 1fr; } }
+/* Switch focus: no black browser outline after a click; a soft ring for keyboard users. */
+.mode-switch a:focus { outline: none; }
+.mode-switch a:focus-visible { box-shadow: 0 0 0 3px var(--accent-ring); }
