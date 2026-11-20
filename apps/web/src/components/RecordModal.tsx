@@ -50,7 +50,7 @@ export function RecordModal({ record, fields, primaryFieldId, labels, files, tab
           {canDelete && <button
             className="btn sm danger"
             onClick={async () => {
-              const ok = await dialogs.confirm({ title: "Delete this record?", message: "It will be removed from every view and link.", confirmText: "Delete", danger: true });
+              const ok = await dialogs.confirm({ title: "Delete this record?", message: "It moves to the Trash (⋯ → Trash) for 30 days, and you can undo straight away with Ctrl+Z.", confirmText: "Delete", danger: true });
               if (ok) onDelete();
             }}
           >

@@ -15,6 +15,7 @@ import { GridView } from "./GridView";
 import { KanbanView } from "./KanbanView";
 import { RecordModal } from "./RecordModal";
 import { ViewSidebar } from "./ViewSidebar";
+import { TrashDialog } from "./TrashDialog";
 import { ViewToolbar } from "./ViewToolbar";
 
 /** Everything a view component needs to read and change data. */
@@ -51,6 +52,8 @@ export interface ViewContext {
   saveCells: (recordId: string, patch: Record<string, CellValue>) => void;
   addRecord: (cells?: Record<string, CellValue>) => Promise<RecordRow | undefined>;
   deleteRecords: (ids: string[]) => Promise<void>;
+  /** Open the base's trash (deleted records). */
+  openTrash: () => void;
   updateConfig: (patch: Partial<ViewConfig>) => void;
   openRecord: (id: string) => void;
   editField: (field?: Field) => void;
@@ -114,7 +117,46 @@ export function TableWorkspace({ baseId, tableId, tables, role, guest }: {
   const setRecords = (fn: (r: RecordRow[]) => RecordRow[], labels?: LinkLabels) =>
     qc.setQueryData<ViewRecords>(recordsKey, (d) => (d ? { ...d, records: fn(d.records), labels: { ...d.labels, ...labels } } : d));
 
-  const saveCells: ViewContext["saveCells"] = (recordId, patch) => {
+  // ---------------- undo / redo ----------------
+  // Each step remembers enough to reverse itself. Quick bursts of cell edits (paste, fill handle,
+  // clearing a range) become one step, like in Airtable.
+  type Step =
+    | { kind: "cells"; recordId: string; before: Record<string, CellValue>; after: Record<string, CellValue> }
+    | { kind: "delete"; ids: string[] }
+    | { kind: "create"; id: string };
+  type Entry = { label: string; steps: Step[]; at: number };
+  const undoStack = useRef<Entry[]>([]);
+  const redoStack = useRef<Entry[]>([]);
+  const [toast, setToast] = useState<{ text: string; action?: { label: string; run: () => void } } | null>(null);
+  const toastTimer = useRef<number>();
+  const showToast = (text: string, action?: { label: string; run: () => void }) => {
+    setToast({ text, action });
+    window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 6000);
+  };
+  const remember = (label: string, step: Step) => {
+    const now = Date.now();
+    const top = undoStack.current[undoStack.current.length - 1];
+    if (top && step.kind === "cells" && now - top.at < 400 && top.steps.every((s) => s.kind === "cells")) {
+      top.steps.push(step);
+      top.at = now;
+      top.label = `${top.steps.length} cell edits`;
+    } else {
+      undoStack.current.push({ label, steps: [step], at: now });
+      if (undoStack.current.length > 100) undoStack.current.shift();
+    }
+    redoStack.current = [];
+  };
+  const fieldName = (id: string) => schema.data?.fields.find((f) => f.id === id)?.name ?? "a field";
+
+  const saveCells: ViewContext["saveCells"] = (recordId, patch) => applyCells(recordId, patch, true);
+  const applyCells = (recordId: string, patch: Record<string, CellValue>, track: boolean) => {
+    if (track) {
+      const cur = qc.getQueryData<ViewRecords>(recordsKey)?.records.find((r) => r.id === recordId);
+      const before = Object.fromEntries(Object.keys(patch).map((k) => [k, cur?.cells[k] ?? null]));
+      const keys = Object.keys(patch);
+      remember(keys.length === 1 ? `edit to “${fieldName(keys[0])}”` : `${keys.length} cell edits`, { kind: "cells", recordId, before, after: patch });
+    }
     setError(null);
     setRecords((rs) => rs.map((r) => (r.id === recordId ? { ...r, cells: { ...r.cells, ...patch } } : r)));
     api.updateRecord(recordId, patch).then(({ record }) => {
@@ -133,13 +175,19 @@ export function TableWorkspace({ baseId, tableId, tables, role, guest }: {
     try {
       const { record } = await api.createRecord(tableId, cells);
       setRecords((rs) => [...rs, record]);
+      remember("new record", { kind: "create", id: record.id });
       return record;
     } catch (e) {
       fail(e);
     }
   };
 
-  const deleteRecords: ViewContext["deleteRecords"] = async (ids) => {
+  const deleteRecords: ViewContext["deleteRecords"] = (ids) => removeRecords(ids, true);
+  const removeRecords = async (ids: string[], track: boolean) => {
+    if (track) {
+      remember(ids.length === 1 ? "delete" : `delete of ${ids.length} records`, { kind: "delete", ids });
+      showToast(ids.length === 1 ? "Record deleted" : `${ids.length} records deleted`, { label: "Undo", run: () => undoRef.current?.() });
+    }
     const set = new Set(ids);
     setRecords((rs) => rs.filter((r) => !set.has(r.id)));
     try {
@@ -150,6 +198,63 @@ export function TableWorkspace({ baseId, tableId, tables, role, guest }: {
       fail(e);
     }
   };
+
+  const restore = async (ids: string[]) => {
+    for (const id of ids) await api.restoreRecord(id);
+    await qc.invalidateQueries({ queryKey: ["viewRecords"] });
+  };
+  const runSteps = async (entry: Entry, direction: "undo" | "redo") => {
+    const steps = direction === "undo" ? [...entry.steps].reverse() : entry.steps;
+    for (const s of steps) {
+      if (s.kind === "cells") applyCells(s.recordId, direction === "undo" ? s.before : s.after, false);
+      else if (s.kind === "delete") await (direction === "undo" ? restore(s.ids) : removeRecords(s.ids, false));
+      else await (direction === "undo" ? removeRecords([s.id], false) : restore([s.id]));
+    }
+  };
+  const undo = async () => {
+    const entry = undoStack.current.pop();
+    if (!entry) return showToast("Nothing to undo");
+    try {
+      await runSteps(entry, "undo");
+      redoStack.current.push(entry);
+      showToast(`Undid ${entry.label}`, { label: "Redo", run: () => redoRef.current?.() });
+    } catch (e) {
+      fail(e);
+    }
+  };
+  const redo = async () => {
+    const entry = redoStack.current.pop();
+    if (!entry) return showToast("Nothing to redo");
+    try {
+      await runSteps(entry, "redo");
+      undoStack.current.push(entry);
+      showToast(`Redid ${entry.label}`, { label: "Undo", run: () => undoRef.current?.() });
+    } catch (e) {
+      fail(e);
+    }
+  };
+  const undoRef = useRef(undo);
+  const redoRef = useRef(redo);
+  undoRef.current = undo;
+  redoRef.current = redo;
+  // Ctrl/Cmd+Z undoes, Ctrl/Cmd+Shift+Z or Ctrl+Y redoes — except while typing in a box or with a dialog open,
+  // where the browser's own undo applies.
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (k !== "z" && k !== "y") return;
+      const t = e.target as HTMLElement | null;
+      if (t?.closest?.("input, textarea, select, [contenteditable='true']")) return;
+      if (document.querySelector(".modal-backdrop, .popover-backdrop")) return;
+      e.preventDefault();
+      if (k === "y" || e.shiftKey) void redoRef.current?.();
+      else void undoRef.current?.();
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
+  const [trashOpen, setTrashOpen] = useState(false);
 
   // View config: update the cache immediately, save after a short pause.
   const saveTimer = useRef<number>();
@@ -219,6 +324,7 @@ export function TableWorkspace({ baseId, tableId, tables, role, guest }: {
         });
     },
     saveCells, addRecord, deleteRecords, updateConfig,
+    openTrash: () => setTrashOpen(true),
     openRecord: setOpenRecordId,
     editField: (field) => setDialog({ field }),
     deleteField: async (f) => {
@@ -266,6 +372,21 @@ export function TableWorkspace({ baseId, tableId, tables, role, guest }: {
       <div className="view-main">
         {view.type !== "form" && <ViewToolbar ctx={ctx} recordCount={ctx.records.length} loading={recordsQ.isFetching} />}
         {error && <div className="error banner" onClick={() => setError(null)}>{error} (click to dismiss)</div>}
+        {toast && (
+          <div className="toast" role="status">
+            <span>{toast.text}</span>
+            {toast.action && <button onClick={() => { const a = toast.action!; setToast(null); a.run(); }}>{toast.action.label}</button>}
+            <button className="toast-x" title="Dismiss" onClick={() => setToast(null)}>×</button>
+          </div>
+        )}
+        {trashOpen && (
+          <TrashDialog
+            baseId={baseId}
+            canDeleteForever={canAddRecords}
+            onRestored={() => qc.invalidateQueries({ queryKey: ["viewRecords"] })}
+            onClose={() => setTrashOpen(false)}
+          />
+        )}
         {recordsQ.isLoading ? (
           <div className="center"><div className="spinner" /></div>
         ) : view.type === "kanban" ? (

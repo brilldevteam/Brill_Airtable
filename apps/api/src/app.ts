@@ -14,6 +14,7 @@ import { registerMembers } from "./members";
 import { registerRealtime } from "./realtime";
 import { registerRoutes } from "./routes";
 import { registerShare } from "./share";
+import { registerTrash } from "./trash";
 
 export interface AppOptions {
   secureCookies?: boolean;
@@ -94,6 +95,7 @@ export function buildApp(db: Db, opts: AppOptions) {
     registerImportExport(app, db);
     registerMembers(app, db, { mailer, appUrl });
     registerActivity(app, db);
+    registerTrash(app, db);
     registerShare(app, db, files);
   });
   if (opts.devMail && mailer.outbox) {

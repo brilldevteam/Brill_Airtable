@@ -11,7 +11,7 @@ import {
   type FilterOperator,
   type SortSpec,
 } from "@brill/shared";
-import { ArrowDownUp, CalendarDays, Check, ListTree, Globe, Image as ImageIcon, Maximize, Palette, Download, EyeOff, FileUp, Kanban, ListFilter, MoreHorizontal, Plus, Rows3, Search, X } from "lucide-react";
+import { ArrowDownUp, CalendarDays, Check, ListTree, Trash2, Globe, Image as ImageIcon, Maximize, Palette, Download, EyeOff, FileUp, Kanban, ListFilter, MoreHorizontal, Plus, Rows3, Search, X } from "lucide-react";
 import { api } from "../api";
 import { ImportCsvDialog } from "./ImportCsvDialog";
 import { ShareLinkDialog } from "./ShareLinkDialog";
@@ -144,6 +144,8 @@ export function ViewToolbar({ ctx, recordCount, loading }: { ctx: ViewContext; r
             <div className="menu">
               {ctx.canAddRecords && <button onClick={() => { setOpen(null); setImporting(true); }}><FileUp size={15} /> Import CSV…</button>}
               <button onClick={() => { setOpen(null); setSharing(true); }}><Globe size={15} /> Share view (public link)…</button>
+              {ctx.canEdit && <button onClick={() => { setOpen(null); ctx.openTrash(); }}><Trash2 size={15} /> Trash (deleted records)…</button>}
+              {ctx.canEdit && <div className="menu-label menu-tip">Undo: Ctrl+Z · Redo: Ctrl+Shift+Z</div>}
               <button onClick={() => { setOpen(null); window.location.href = api.exportCsvUrl(view.id); }}>
                 <Download size={15} /> Download CSV of this view
               </button>

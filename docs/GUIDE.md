@@ -99,6 +99,14 @@ The left sidebar lists the table's views. Create one of five kinds; each keeps i
 
 The toolbar on every view has **Filter** (AND/OR conditions with type-aware operators), **Sort** (several levels), **Hide fields** and **Row height**. Filters and sorts run on the server.
 
+**Undo, redo and the Trash.**
+- **Ctrl+Z** (Cmd+Z on a Mac) undoes your last change in a table: a cell edit, a whole paste or fill-handle drag, a new record, or a delete. Press it again to go further back, up to 100 steps.
+- **Ctrl+Shift+Z** or **Ctrl+Y** redoes. While you're typing in a box, these keys undo the typing instead.
+- Every delete shows a notice with an **Undo** button.
+- Deleted records move to the base's **Trash** (⋯ → **Trash**). It shows what each record was, who deleted it and when.
+- **Restore** puts a record back in its table *with its links*. If a linked record is also in the Trash, the link comes back once that one is restored too.
+- Records are removed for good after 30 days, or straight away with **Delete forever**.
+
 ## 8. Attachments
 
 Select an attachment cell and press Enter to open the strip. **Add** offers **Local files** (drag and drop, with progress), **Link (URL)** (the server downloads it and refuses private network addresses) and **Webcam**. Click a file to open the full-screen viewer: preview, step through files with ← and →, rename, download, delete, and add **comments on that file**. Risky file types such as HTML and SVG always download and never open in the browser.
@@ -166,10 +174,10 @@ Browser (React + Vite)            API (Node + Fastify)                Storage
   - URL fetches are protected against SSRF.
   - Spreadsheet exports are protected against formula injection.
 - **Quality:**
-  - `pnpm test` runs 119 automated tests across API and engine.
+  - `pnpm test` runs 124 automated tests across API and engine.
   - `pnpm typecheck` checks types across the whole project.
   - `pnpm seed:demo` exercises the HTTP API end to end.
 
 ## 13. What isn't built yet
 
-Automations, interfaces (dashboards), trash and restore, undo, Google sign-in, two-factor sign-in, record paging for very large tables, and production hosting. [SAAS_PLAN.md](../SAAS_PLAN.md) covers these and the move to a SaaS product.
+Automations, interfaces (dashboards), Google sign-in, two-factor sign-in, record paging for very large tables, and production hosting. [SAAS_PLAN.md](../SAAS_PLAN.md) covers these and the move to a SaaS product.

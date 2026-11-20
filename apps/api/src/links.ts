@@ -436,7 +436,7 @@ export async function attachmentNames(db: Db, ids: string[]): Promise<LinkLabels
 }
 
 /** Record history: who changed which fields, from what to what. Calculated fields aren't logged. */
-export async function logHistory(db: Db, recordId: string, userId: string | null, kind: "create" | "update" | "delete", changes: Record<string, { from: CellValue; to: CellValue }>) {
+export async function logHistory(db: Db, recordId: string, userId: string | null, kind: "create" | "update" | "delete" | "restore", changes: Record<string, { from: CellValue; to: CellValue }>) {
   await db.query(`INSERT INTO record_history (record_id, user_id, kind, changes) VALUES ($1,$2,$3,$4)`, [recordId, userId, kind, changes]);
 }
 

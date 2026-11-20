@@ -62,10 +62,14 @@ export interface PublicView {
 }
 export interface Comment { id: string; body: string; createdAt: string; userId: string; userName: string }
 export interface HistoryEntry {
-  id: string; kind: "create" | "update" | "delete"; createdAt: string; userId: string | null; userName: string | null;
+  id: string; kind: "create" | "update" | "delete" | "restore"; createdAt: string; userId: string | null; userName: string | null;
   changes: Record<string, { from: import("@brill/shared").CellValue; to: import("@brill/shared").CellValue }>;
 }
 export interface AttachmentComment { id: string; body: string; createdAt: string; userId: string; userName: string }
+export interface TrashItem {
+  id: string; tableId: string; tableName: string; name: string;
+  details: { field: string; value: string }[]; deletedAt: string; deletedBy: string | null;
+}
 export interface SharedBase extends Base { role: Role; workspaceName: string }
 export interface BaseSharing {
   base: { id: string; name: string };
@@ -225,4 +229,7 @@ export const api = {
     call<{ record: RecordRow }>("POST", `/api/tables/${tableId}/records`, { cells }),
   updateRecord: (id: string, cells: Record<string, unknown>) => call<{ record: RecordRow }>("PATCH", `/api/records/${id}`, { cells }),
   deleteRecord: (id: string) => call("DELETE", `/api/records/${id}`),
+  restoreRecord: (id: string) => call<{ record: RecordRow }>("POST", `/api/records/${id}/restore`, {}),
+  deleteRecordForever: (id: string) => call("DELETE", `/api/records/${id}/permanent`),
+  trash: (baseId: string) => call<{ days: number; items: TrashItem[] }>("GET", `/api/bases/${baseId}/trash`),
 };

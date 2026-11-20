@@ -495,7 +495,7 @@ export function GridView({ ctx }: { ctx: ViewContext }) {
               const n = selectedIds.length;
               const ok = await dialogs.confirm({
                 title: `Delete ${n} record${n === 1 ? "" : "s"}?`,
-                message: "Deleted records are removed from every view and from any links to them.",
+                message: "They move to the Trash (⋯ → Trash) for 30 days, and you can undo straight away with Ctrl+Z.",
                 confirmText: "Delete",
                 danger: true,
               });

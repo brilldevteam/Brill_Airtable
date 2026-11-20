@@ -1127,3 +1127,31 @@ a.btn { text-decoration: none; }
 .sb-cell:hover:not(:disabled) { background: var(--hover); }
 .sb-cell:hover .sb-hint { opacity: 1; }
 .sb-cell:disabled { cursor: default; }
+
+/* ---------- trash & undo ---------- */
+.trash-modal { max-width: 620px; }
+.trash-bar { display: flex; gap: 8px; }
+.trash-find { flex: 1; }
+.trash-list { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--r-lg); max-height: 420px; overflow-y: auto; }
+.trash-row { display: flex; align-items: center; gap: 10px; padding: 11px 12px; }
+.trash-row + .trash-row { border-top: 1px solid var(--border); }
+.trash-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.trash-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.trash-name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.trash-table { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; padding: 1px 7px; border-radius: 6px; background: var(--surface-3); color: var(--text-2); font-size: 11.5px; font-weight: 500; }
+.trash-details { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; color: var(--text-2); }
+.trash-details em { font-style: normal; color: var(--text-3); margin-right: 3px; }
+.trash-meta { font-size: 12px; color: var(--text-3); }
+.trash-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 34px 16px; color: var(--text-3); text-align: center; }
+.trash-empty strong { color: var(--text); font-size: 14px; }
+.menu-tip { text-transform: none; letter-spacing: 0; font-weight: 400; border-top: 1px solid var(--border); margin-top: 4px; padding-top: 8px; }
+.toast {
+  position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 120;
+  display: flex; align-items: center; gap: 14px; padding: 10px 12px 10px 16px; border-radius: 12px;
+  background: #18181b; color: #fafafa; font-size: 13.5px; box-shadow: 0 12px 32px -8px rgba(0,0,0,.35);
+  animation: toast-in .18s var(--ease);
+}
+.toast button { border: none; background: none; color: #a5b4fc; font-weight: 600; font-size: 13.5px; padding: 2px 4px; }
+.toast button:hover { color: #c7d2fe; }
+.toast .toast-x { color: #71717a; font-size: 18px; line-height: 1; font-weight: 400; }
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }

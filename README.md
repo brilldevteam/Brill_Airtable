@@ -39,9 +39,10 @@ Works today:
 - **Live updates**: changes by teammates (or your other tabs) appear within a second, no refresh — the "● Live" dot in the top bar shows the connection. One server process (in-memory events); several processes would need Redis.
 - **Form view**: build a form (title, description, which fields, question labels, help text, required, order, button text, thank-you message) and share it with **Share form** — anyone with the link can answer at `/f/<token>` without an account, including uploading files. Each answer becomes a record. Link fields and calculated fields can't be on a public form. Submissions are rate-limited per visitor.
 - **Shared views**: any other view can be shared read-only (⋯ → Share view) at `/v/<token>` — only that view's visible fields, with its filters; images and files from visible attachment fields load through the link. Creators/owners can make a new link (the old one stops working) or turn it off.
+- **Trash and undo**: deleted records go to the base's **Trash** (⋯ → Trash) for 30 days — restore them with their links, or delete them for good. **Ctrl+Z** undoes your last change in a table (cell edits, pastes and fills as one step, new and deleted records) and **Ctrl+Shift+Z** / **Ctrl+Y** redoes it; a notice after each delete has an Undo button.
 - **Record activity**: the record popup has **Comments** and **History** (who changed which field, from what to what, and when).
 
-Not yet: automations, interfaces (dashboards), trash / restore of deleted records. Link fields can only be filtered by "is empty / is not empty" for now. These follow the phases in the plan.
+Not yet: automations, interfaces (dashboards). Link fields can only be filtered by "is empty / is not empty" for now. These follow the phases in the plan.
 
 ## Requirements
 

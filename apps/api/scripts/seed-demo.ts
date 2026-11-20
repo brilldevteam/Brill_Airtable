@@ -78,7 +78,11 @@ async function setUpTable(tableId: string, name: string, notes: string | null, s
   await call("PATCH", `/api/tables/${tableId}`, { name });
   const t = await call("GET", `/api/tables/${tableId}`);
   const recs = (await call("GET", `/api/views/${t.views[0].id}/records`)).records;
-  for (const r of recs) await call("DELETE", `/api/records/${r.id}`);
+  // Remove the blank starter rows for good, so they don't fill the Trash.
+  for (const r of recs) {
+    await call("DELETE", `/api/records/${r.id}`);
+    await call("DELETE", `/api/records/${r.id}/permanent`);
+  }
   const [, notesF, statusF] = t.fields as Field[];
   if (notes) await call("PATCH", `/api/fields/${notesF.id}`, { name: notes });
   else await call("DELETE", `/api/fields/${notesF.id}`);

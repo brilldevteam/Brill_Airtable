@@ -220,6 +220,14 @@ const MIGRATIONS: string[] = [
   ALTER TABLE workspace_invites ADD COLUMN base_id TEXT REFERENCES bases(id) ON DELETE CASCADE;
   ALTER TABLE tables ADD COLUMN record_access TEXT NOT NULL DEFAULT 'all' CHECK (record_access IN ('all','team','creators'))
   `,
+  /* 010 trash: restoring is logged in record history; deleted records are listed per table */ `
+  ALTER TABLE record_history DROP CONSTRAINT IF EXISTS record_history_kind_check;
+  ALTER TABLE record_history ADD CONSTRAINT record_history_kind_check CHECK (kind IN ('create','update','delete','restore'));
+  CREATE INDEX records_deleted_idx ON records (table_id, deleted_at) WHERE deleted_at IS NOT NULL
+  `,
+  /* 011 trash: links to records still in the trash, re-made when those are restored */ `
+  ALTER TABLE records ADD COLUMN trash_links JSONB
+  `,
 ];
 
 async function migrate(db: Db) {

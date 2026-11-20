@@ -100,7 +100,7 @@ function HistoryList({ recordId, fields }: { recordId: string; fields: Field[] }
           <div className="act-body">
             <div className="act-meta">
               <b>{e.userName ?? "Someone"}</b>
-              <span>{e.kind === "create" ? "created this record" : e.kind === "delete" ? "deleted this record" : "edited"} · {timeAgo(e.createdAt)}</span>
+              <span>{e.kind === "create" ? "created this record" : e.kind === "delete" ? "deleted this record" : e.kind === "restore" ? "restored this record from the trash" : "edited"} · {timeAgo(e.createdAt)}</span>
             </div>
             {Object.entries(e.changes).map(([fid, ch]) => {
               const f = byId.get(fid);
