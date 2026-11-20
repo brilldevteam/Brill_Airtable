@@ -41,9 +41,10 @@ Works today:
 - **Shared views**: any other view can be shared read-only (⋯ → Share view) at `/v/<token>` — only that view's visible fields, with its filters; images and files from visible attachment fields load through the link. Creators/owners can make a new link (the old one stops working) or turn it off.
 - **Trash and undo**: deleted records go to the base's **Trash** (⋯ → Trash) for 30 days — restore them with their links, or delete them for good. **Ctrl+Z** undoes your last change in a table (cell edits, pastes and fills as one step, new and deleted records) and **Ctrl+Shift+Z** / **Ctrl+Y** redoes it; a notice after each delete has an Undo button.
 - **Automations** (⚡ Automations on a base): *when* a record is created, updated (any field or chosen fields), starts matching conditions, or a form is submitted — *then* update the record, create a record in any table, send an email, or call a webhook. Text can use `{Field name}` tokens (and `{Record URL}`); people fields in an email's To use their addresses. Runs in the background after the change is saved, with a run history (each step's result) and a **Test** button. Automations can trigger other automations up to 3 levels deep but never themselves. Creators and owners manage them.
+- **Dashboards** (Data | **Dashboards** switch in a base): pages of **numbers** (count, sum, average, min, max), **charts** (bar, column, line, donut — grouped by any field, dates by day/week/month with empty periods shown as zero, top N + Other) and **record lists**, plus text notes. Each widget reads a table, optionally through one of its views (its filters and sort). Live: they refresh as records change. Everyone in the base can look (including clients invited to it); creators and owners arrange them.
 - **Record activity**: the record popup has **Comments** and **History** (who changed which field, from what to what, and when).
 
-Not yet: interfaces (dashboards), scheduled automations. Link fields can only be filtered by "is empty / is not empty" for now. These follow the phases in the plan.
+Not yet: scheduled automations, sharing a dashboard by public link. Link fields can only be filtered by "is empty / is not empty" for now. These follow the phases in the plan.
 
 ## Requirements
 

@@ -16,6 +16,7 @@ import { registerRoutes } from "./routes";
 import { registerShare } from "./share";
 import { registerTrash } from "./trash";
 import { AutomationEngine, registerAutomations } from "./automations";
+import { registerDashboards } from "./dashboards";
 
 export interface AppOptions {
   secureCookies?: boolean;
@@ -103,6 +104,7 @@ export function buildApp(db: Db, opts: AppOptions) {
     registerActivity(app, db);
     registerTrash(app, db);
     registerAutomations(app, db);
+    registerDashboards(app, db);
     registerShare(app, db, files);
   });
   if (opts.devMail && mailer.outbox) {

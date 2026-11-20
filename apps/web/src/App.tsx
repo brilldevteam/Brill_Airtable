@@ -46,6 +46,8 @@ function SignedInApp() {
       <Route path="/" element={<HomePage user={user} />} />
       <Route path="/invite/:token" element={<InvitePage />} />
       <Route path="/base/:baseId" element={<BasePage />} />
+      <Route path="/base/:baseId/dash" element={<BasePage />} />
+      <Route path="/base/:baseId/dash/:dashId" element={<BasePage />} />
       <Route path="/base/:baseId/:tableId" element={<BasePage />} />
       <Route path="/base/:baseId/:tableId/:viewId" element={<BasePage />} />
       <Route path="*" element={<Navigate to="/" replace />} />

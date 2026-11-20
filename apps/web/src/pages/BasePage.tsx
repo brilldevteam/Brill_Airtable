@@ -1,8 +1,8 @@
 import type { Table } from "@brill/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronDown, ChevronRight, Pencil, Plus, Sheet, Trash2, Users, Zap } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, LayoutDashboard, Pencil, Plus, Sheet, Trash2, Users, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { BASE_COLORS } from "../colors";
 import { AppBar } from "../components/AppBar";
@@ -10,13 +10,19 @@ import { useDialogs } from "../components/Dialogs";
 import { Popover, anchorOf, type Anchor } from "../components/Popover";
 import { ShareDialog } from "../components/ShareDialog";
 import { AutomationsPanel } from "../components/AutomationsPanel";
+import { DashboardView, useDashboards } from "../components/DashboardView";
+import type { Dashboard } from "@brill/shared";
 import { TableWorkspace } from "../components/TableWorkspace";
 import { useBaseEvents } from "../useBaseEvents";
 
 const RECORD_ACCESS_LABEL = { all: "Everyone who can edit", team: "Workspace team only", creators: "Creators and owners only" } as const;
 
 export function BasePage() {
-  const { baseId, tableId } = useParams();
+  const { baseId, tableId, dashId } = useParams();
+  const dashMode = useLocation().pathname.startsWith(`/base/${baseId}/dash`);
+  const dashQ = useDashboards(baseId!);
+  const dashboards = dashQ.data?.dashboards ?? [];
+  const [dashMenu, setDashMenu] = useState<{ dash: Dashboard; anchor: Anchor } | null>(null);
   const nav = useNavigate();
   const qc = useQueryClient();
   const dialogs = useDialogs();
@@ -30,10 +36,15 @@ export function BasePage() {
 
   const tables = q.data?.tables ?? [];
   useEffect(() => {
+    if (dashMode) return;
     if (q.data && (!tableId || !tables.some((t) => t.id === tableId)) && tables[0]) {
       nav(`/base/${baseId}/${tables[0].id}`, { replace: true });
     }
-  }, [q.data, tableId]);
+  }, [q.data, tableId, dashMode]);
+  // On the dashboards side, open the first dashboard if none is chosen.
+  useEffect(() => {
+    if (dashMode && !dashId && dashboards[0]) nav(`/base/${baseId}/dash/${dashboards[0].id}`, { replace: true });
+  }, [dashMode, dashId, dashboards.length]);
 
   const refresh = () => qc.invalidateQueries({ queryKey: ["base", baseId] });
   const run = async (fn: () => Promise<unknown>) => {
@@ -79,6 +90,14 @@ export function BasePage() {
     });
     if (ok) run(async () => { await api.deleteTable(t.id); await refresh(); });
   };
+  const addDashboard = async () => {
+    const name = await dialogs.prompt({ title: "New dashboard", label: "Dashboard name", defaultValue: `Dashboard ${dashboards.length + 1}`, confirmText: "Create dashboard" });
+    if (name) run(async () => {
+      const { dashboard } = await api.createDashboard(baseId!, name);
+      await qc.invalidateQueries({ queryKey: ["dashboards", baseId] });
+      nav(`/base/${baseId}/dash/${dashboard.id}`);
+    });
+  };
   const addTable = async () => {
     const name = await dialogs.prompt({ title: "Add a table", label: "Table name", defaultValue: `Table ${tables.length + 1}`, confirmText: "Create table" });
     if (name) run(async () => { const { table } = await api.createTable(base.id, name); await refresh(); nav(`/base/${baseId}/${table.id}`); });
@@ -108,7 +127,31 @@ export function BasePage() {
       {automating && <AutomationsPanel baseId={base.id} tables={tables} onClose={() => setAutomating(false)} />}
 
       <nav className="table-tabs">
-        {tables.map((t) => {
+        <div className="mode-switch" role="tablist" aria-label="Data or dashboards">
+          <Link role="tab" aria-selected={!dashMode} className={!dashMode ? "on" : ""} to={`/base/${baseId}`}><Sheet size={14} /> Data</Link>
+          <Link role="tab" aria-selected={dashMode} className={dashMode ? "on" : ""} to={`/base/${baseId}/dash`}><LayoutDashboard size={14} /> Dashboards</Link>
+        </div>
+        {dashMode && dashboards.map((d) => (
+          <Link
+            key={d.id}
+            to={`/base/${baseId}/dash/${d.id}`}
+            className={"tab" + (d.id === dashId ? " active" : "")}
+            onContextMenu={(e) => { if (!canDesign) return; e.preventDefault(); setDashMenu({ dash: d, anchor: anchorOf(e.currentTarget) }); }}
+          >
+            <LayoutDashboard size={15} />
+            {d.name}
+            {d.id === dashId && canDesign && (
+              <span className="tab-menu" role="button" title="Dashboard options"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setDashMenu({ dash: d, anchor: anchorOf(e.currentTarget.parentElement!) }); }}>
+                <ChevronDown size={14} />
+              </span>
+            )}
+          </Link>
+        ))}
+        {dashMode && canDesign && (
+          <button className="tab add" onClick={addDashboard}><Plus size={15} /> New dashboard</button>
+        )}
+        {!dashMode && tables.map((t) => {
           const active = t.id === tableId;
           return (
             <Link
@@ -133,7 +176,7 @@ export function BasePage() {
             </Link>
           );
         })}
-        {canDesign && (
+        {!dashMode && canDesign && (
           <button className="tab add" onClick={addTable}>
             <Plus size={15} /> Add table
           </button>
@@ -141,8 +184,42 @@ export function BasePage() {
       </nav>
 
       {error && <div className="error banner" onClick={() => setError(null)}>{error}</div>}
-      {tableId && tables.some((t) => t.id === tableId) && (
+      {!dashMode && tableId && tables.some((t) => t.id === tableId) && (
         <TableWorkspace key={tableId} baseId={baseId!} tableId={tableId} tables={tables} role={role} guest={guest} />
+      )}
+      {dashMode && (() => {
+        const d = dashboards.find((x) => x.id === dashId);
+        if (dashQ.isLoading) return <div className="center"><div className="spinner" /></div>;
+        if (!d) {
+          return (
+            <div className="dash-empty" style={{ marginTop: 60 }}>
+              <LayoutDashboard size={26} />
+              <strong>No dashboards yet</strong>
+              <span>Dashboards show numbers, charts and lists from your tables — they update as records change.</span>
+              {canDesign && <button className="btn primary" onClick={addDashboard}><Plus size={15} /> Create a dashboard</button>}
+            </div>
+          );
+        }
+        return <DashboardView key={d.id} dashboard={d} tables={tables} canDesign={canDesign} />;
+      })()}
+      {dashMenu && (
+        <Popover anchor={dashMenu.anchor} onClose={() => setDashMenu(null)} minWidth={200}>
+          <div className="menu">
+            <button onClick={async () => {
+              const d = dashMenu.dash;
+              setDashMenu(null);
+              const name = await dialogs.prompt({ title: "Rename dashboard", label: "Dashboard name", defaultValue: d.name });
+              if (name) run(async () => { await api.updateDashboard(d.id, { name }); await qc.invalidateQueries({ queryKey: ["dashboards", baseId] }); });
+            }}><Pencil size={15} /> Rename dashboard</button>
+            <hr />
+            <button className="danger" onClick={async () => {
+              const d = dashMenu.dash;
+              setDashMenu(null);
+              const ok = await dialogs.confirm({ title: `Delete “${d.name}”?`, message: "Only the dashboard is deleted — your records stay as they are.", confirmText: "Delete dashboard", danger: true });
+              if (ok) run(async () => { await api.deleteDashboard(d.id); await qc.invalidateQueries({ queryKey: ["dashboards", baseId] }); nav(`/base/${baseId}/dash`); });
+            }}><Trash2 size={15} /> Delete dashboard</button>
+          </div>
+        </Popover>
       )}
 
       {baseMenu && (

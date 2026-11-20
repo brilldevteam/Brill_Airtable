@@ -259,6 +259,19 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (automation_id, record_id)
   )
   `,
+  /* 013 dashboards: widget pages per base */ `
+  CREATE TABLE dashboards (
+    id TEXT PRIMARY KEY,
+    base_id TEXT NOT NULL REFERENCES bases(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    widgets JSONB NOT NULL DEFAULT '[]',
+    position INT NOT NULL DEFAULT 0,
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+  CREATE INDEX dashboards_base_idx ON dashboards (base_id, position)
+  `,
 ];
 
 async function migrate(db: Db) {

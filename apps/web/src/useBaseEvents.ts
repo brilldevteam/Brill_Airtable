@@ -46,6 +46,7 @@ export function useBaseEvents(baseId: string | undefined) {
       switch (e.scope) {
         case "records":
           queue(["viewRecords"]);
+          queue(["dashboardData"]);
           if (e.recordId) queue(["recordHistory", e.recordId]);
           break;
         case "comments":

@@ -175,6 +175,31 @@ Click **⚡ Automations** in a base's header (creators and owners only). Each au
 - Automations that change records can trigger other automations, up to 3 levels deep, but never themselves, so loops stop on their own.
 - The demo base has two examples, switched off.
 
+## 11c. Dashboards
+
+Switch a base from **Data** to **Dashboards** (top left of the tab bar). The demo base has **Studio overview**.
+
+- **Create:** **New dashboard** makes one. **Edit dashboard** → **Add widget** adds widgets:
+
+  | Widget | Shows |
+  |---|---|
+  | **Number** | How many records, or the sum, average, minimum or maximum of a number or money field. For example "Waiting to be paid ₹2,40,000". |
+  | **Chart** | Bar, column, line or donut, grouped by any field: a status, a person, a client, or a date by day, week or month. Bars can count records or add up a field. |
+  | **Record list** | A few records with the fields you pick, such as the next deadlines. |
+  | **Text** | A heading or note. |
+
+- **Which records:** every widget reads a table. Under **Records**, choose *All records* or *Only those in* one of the table's views. The widget then uses that view's filters, and its sort for lists. For example, point a widget at the "Unpaid" view to total only unpaid invoices.
+- **Arranging:** in edit mode, each widget has buttons to move it, make it wider or narrower (quarter, half, three quarters, full width), open its settings, or remove it.
+- **How charts behave:**
+  - Select options keep their colours.
+  - Months or days with nothing in them show as zero, so a timeline has no gaps.
+  - Smaller groups are added up as "Other".
+  - Hovering a bar or slice shows its value and its share of the total.
+- **Updates and access:**
+  - Dashboards update by themselves as records change.
+  - Everyone in the base can view them, including clients invited to just that base; they see the whole base's data anyway.
+  - Creators and owners can change them.
+
 ## 12. Behind the scenes
 
 ```
@@ -199,10 +224,10 @@ Browser (React + Vite)            API (Node + Fastify)                Storage
   - URL fetches are protected against SSRF.
   - Spreadsheet exports are protected against formula injection.
 - **Quality:**
-  - `pnpm test` runs 129 automated tests across API and engine.
+  - `pnpm test` runs 133 automated tests across API and engine.
   - `pnpm typecheck` checks types across the whole project.
   - `pnpm seed:demo` exercises the HTTP API end to end.
 
 ## 13. What isn't built yet
 
-Interfaces (dashboards), scheduled automations, Google sign-in, two-factor sign-in, record paging for very large tables, and production hosting. [SAAS_PLAN.md](../SAAS_PLAN.md) covers these and the move to a SaaS product.
+Scheduled automations, public dashboard links, Google sign-in, two-factor sign-in, record paging for very large tables, and production hosting. [SAAS_PLAN.md](../SAAS_PLAN.md) covers these and the move to a SaaS product.

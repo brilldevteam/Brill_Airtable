@@ -308,7 +308,7 @@ async function main() {
     name: "All projects",
     config: (await call("GET", `/api/tables/${projectsT}`)).views[0].config,
   });
-  await addView(projectsT, "Active — by deadline", "grid", (f) => ({
+  const activeView = await addView(projectsT, "Active — by deadline", "grid", (f) => ({
     filters: { conjunction: "and", conditions: [{ id: "c1", fieldId: f.get("Status")!.id, operator: "isNoneOf", value: [choiceId(f.get("Status")!, "Delivered")] }] },
     sorts: [{ fieldId: f.get("Due date")!.id, direction: "asc" }],
     hiddenFieldIds: ["Brief", "Cover", "Client city", "Team"].map((n) => f.get(n)!.id),
@@ -362,11 +362,32 @@ async function main() {
     name: "All invoices",
     config: { ...(await call("GET", `/api/tables/${invoicesT}`)).views[0].config, summaries: { [(await fieldsOf(invoicesT)).find((x) => x.name === "Amount")!.id]: "sum" } },
   });
-  await addView(invoicesT, "Unpaid", "grid", (f) => ({
+  const unpaidView = await addView(invoicesT, "Unpaid", "grid", (f) => ({
     filters: { conjunction: "and", conditions: [{ id: "c1", fieldId: f.get("Status")!.id, operator: "isAnyOf", value: ["Sent", "Overdue"].map((n) => choiceId(f.get("Status")!, n)) }] },
     sorts: [{ fieldId: f.get("Due")!.id, direction: "asc" }],
   }));
   await addView(invoicesT, "Status board", "kanban", (f) => ({ stackFieldId: f.get("Status")!.id }));
+
+  // ---------- a dashboard ----------
+  {
+    const P3 = new Map((await fieldsOf(projectsT)).map((f) => [f.name, f.id]));
+    const T3 = new Map((await fieldsOf(tasksT)).map((f) => [f.name, f.id]));
+    const I3 = new Map((await fieldsOf(invoicesT)).map((f) => [f.name, f.id]));
+    const w = (id: string, rest: object) => ({ id: `wdg${id.padEnd(14, "0")}`, ...rest });
+    await call("POST", `/api/bases/${base.id}/dashboards`, {
+      name: "Studio overview",
+      widgets: [
+        w("active", { type: "number", title: "Active projects", tableId: projectsT, viewId: activeView, width: 1 }),
+        w("pipeline", { type: "number", title: "Budget of active projects", tableId: projectsT, viewId: activeView, metric: { kind: "sum", fieldId: P3.get("Budget") }, width: 1 }),
+        w("invoiced", { type: "number", title: "Invoiced", tableId: invoicesT, metric: { kind: "sum", fieldId: I3.get("Amount") }, width: 1 }),
+        w("unpaid", { type: "number", title: "Waiting to be paid", tableId: invoicesT, viewId: unpaidView, metric: { kind: "sum", fieldId: I3.get("Amount") }, width: 1 }),
+        w("stage", { type: "chart", title: "Budget by stage", tableId: projectsT, chartType: "bar", groupFieldId: P3.get("Status"), metric: { kind: "sum", fieldId: P3.get("Budget") }, width: 2 }),
+        w("revenue", { type: "chart", title: "Invoiced by month", tableId: invoicesT, chartType: "column", groupFieldId: I3.get("Issued"), dateBucket: "month", metric: { kind: "sum", fieldId: I3.get("Amount") }, width: 2 }),
+        w("owners", { type: "chart", title: "Tasks by owner", tableId: tasksT, chartType: "donut", groupFieldId: T3.get("Owner"), width: 2 }),
+        w("deadlines", { type: "list", title: "Next deadlines", tableId: projectsT, viewId: activeView, fieldIds: [P3.get("Name"), P3.get("Client"), P3.get("Due date"), P3.get("Status")], limit: 5, width: 2 }),
+      ],
+    });
+  }
 
   // ---------- automations (examples; switched off so the demo doesn't send emails) ----------
   {

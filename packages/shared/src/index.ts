@@ -5,3 +5,4 @@ export * from "./views";
 export * from "./formula";
 export * from "./summary";
 export * from "./automations";
+export * from "./dashboards";

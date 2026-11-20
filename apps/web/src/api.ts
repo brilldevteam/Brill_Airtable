@@ -1,5 +1,5 @@
 import type {
-  Action, Automation, AutomationRun, Trigger,
+  Action, Automation, AutomationRun, Trigger, Dashboard, Widget, WidgetData,
   AttachmentInfo, EditAccess, Base, Field, FieldOptions, FieldType, RecordRow, Table, TableDetail, User, View, ViewConfig, ViewRecords, ViewType,
 } from "@brill/shared";
 
@@ -228,6 +228,11 @@ export const api = {
 
   createRecord: (tableId: string, cells: Record<string, unknown> = {}) =>
     call<{ record: RecordRow }>("POST", `/api/tables/${tableId}/records`, { cells }),
+  dashboards: (baseId: string) => call<{ dashboards: Dashboard[] }>("GET", `/api/bases/${baseId}/dashboards`),
+  createDashboard: (baseId: string, name: string) => call<{ dashboard: Dashboard }>("POST", `/api/bases/${baseId}/dashboards`, { name }),
+  updateDashboard: (id: string, patch: { name?: string; widgets?: Widget[] }) => call<{ dashboard: Dashboard }>("PATCH", `/api/dashboards/${id}`, patch),
+  deleteDashboard: (id: string) => call("DELETE", `/api/dashboards/${id}`),
+  dashboardData: (id: string) => call<{ data: Record<string, WidgetData> }>("GET", `/api/dashboards/${id}/data`),
   automations: (baseId: string) => call<{ automations: Automation[] }>("GET", `/api/bases/${baseId}/automations`),
   createAutomation: (baseId: string, body: { name: string; trigger: Trigger; actions: Action[]; enabled?: boolean }) =>
     call<{ automation: Automation }>("POST", `/api/bases/${baseId}/automations`, body),
