@@ -37,10 +37,22 @@ export function BasePage() {
   const tables = q.data?.tables ?? [];
   useEffect(() => {
     if (dashMode) return;
+    // Opening a base (no table in the address) shows its first dashboard when it has one.
+    if (!tableId) {
+      if (dashQ.isLoading) return;
+      if (dashboards[0]) return nav(`/base/${baseId}/dash/${dashboards[0].id}`, { replace: true });
+    }
     if (q.data && (!tableId || !tables.some((t) => t.id === tableId)) && tables[0]) {
       nav(`/base/${baseId}/${tables[0].id}`, { replace: true });
     }
-  }, [q.data, tableId, dashMode]);
+  }, [q.data, tableId, dashMode, dashQ.isLoading, dashboards.length]);
+  // "Data" goes back to the table you last had open in this base (remembered in this browser).
+  const lastKey = `brill.lastTable.${baseId}`;
+  useEffect(() => {
+    if (tableId) try { localStorage.setItem(lastKey, tableId); } catch { /* private mode */ }
+  }, [tableId, lastKey]);
+  const remembered = (() => { try { return localStorage.getItem(lastKey); } catch { return null; } })();
+  const dataTableId = tables.find((t) => t.id === remembered)?.id ?? tables[0]?.id;
   // On the dashboards side, open the first dashboard if none is chosen.
   useEffect(() => {
     if (dashMode && !dashId && dashboards[0]) nav(`/base/${baseId}/dash/${dashboards[0].id}`, { replace: true });
@@ -129,7 +141,7 @@ export function BasePage() {
       <nav className="table-tabs">
         <div className="mode-switch" role="tablist" aria-label="Dashboards or data">
           <Link role="tab" aria-selected={dashMode} className={dashMode ? "on" : ""} to={`/base/${baseId}/dash`}><LayoutDashboard size={14} /> Dashboards</Link>
-          <Link role="tab" aria-selected={!dashMode} className={!dashMode ? "on" : ""} to={`/base/${baseId}`}><Sheet size={14} /> Data</Link>
+          <Link role="tab" aria-selected={!dashMode} className={!dashMode ? "on" : ""} to={`/base/${baseId}/${dataTableId ?? ""}`}><Sheet size={14} /> Data</Link>
         </div>
         {dashMode && dashboards.map((d) => (
           <Link
