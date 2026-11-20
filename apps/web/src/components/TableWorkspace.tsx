@@ -35,6 +35,7 @@ export interface ViewContext {
   files: Record<string, AttachmentInfo>;
   /** Add uploaded/renamed files to this view's cache so cells show them straight away. */
   addFiles: (infos: AttachmentInfo[]) => void;
+  baseId: string;
   /** What the signed-in user may do here (the server enforces the same rules). */
   canEdit: boolean;
   /** Invited to this base only (e.g. a client), not a workspace member. */
@@ -192,7 +193,7 @@ export function TableWorkspace({ baseId, tableId, tables, role, guest }: {
   if (!view) return null;
 
   const ctx: ViewContext = {
-    tableId, view, allFields, fields: visibleFields, primaryFieldId,
+    tableId, baseId, view, allFields, fields: visibleFields, primaryFieldId,
     records: recordsQ.data?.records ?? [],
     labels: recordsQ.data?.labels ?? {},
     search,

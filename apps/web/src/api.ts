@@ -38,7 +38,10 @@ export interface PublicFormField {
   label: string;
   help: string;
   required: boolean;
-  options: { choices?: { id: string; name: string; color: string }[]; precision?: number; includeTime?: boolean };
+  options: {
+    choices?: { id: string; name: string; color: string }[]; precision?: number; includeTime?: boolean;
+    symbol?: string; max?: number; durationFormat?: "h:mm" | "h:mm:ss";
+  };
 }
 export interface PublicForm {
   title: string;
@@ -105,6 +108,7 @@ export const api = {
   deleteBase: (id: string) => call("DELETE", `/api/bases/${id}`),
 
   base: (id: string) => call<{ base: Base; tables: Table[]; role: Role; guest: boolean }>("GET", `/api/bases/${id}`),
+  collaborators: (baseId: string) => call<{ users: { id: string; name: string; email: string }[] }>("GET", `/api/bases/${baseId}/collaborators`),
   baseSharing: (baseId: string) => call<BaseSharing>("GET", `/api/bases/${baseId}/sharing`),
   inviteToBase: (baseId: string, email: string, role: Role) =>
     call<{ invite: { id: string; email: string; role: Role; token: string; path: string; emailed: boolean } }>(

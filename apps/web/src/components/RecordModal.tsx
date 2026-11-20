@@ -6,6 +6,7 @@ import { FieldIcon } from "./fieldIcons";
 import { AttachmentTiles } from "./AttachmentPicker";
 import { ActivityPanel } from "./ActivityPanel";
 import { LinkPicker } from "./LinkPicker";
+import { RatingInput, UserChips, UserPicker } from "./PeoplePicker";
 import { SelectPicker } from "./Popover";
 
 interface Props {
@@ -98,10 +99,36 @@ function FieldInput({ field, value, labels, onSave }: { field: Field; value: Cel
     onSave(text === "" ? null : field.type === "number" ? (Number(text) as CellValue) : text);
   };
 
+  if (field.type === "createdBy" || field.type === "lastModifiedBy") {
+    return <div className="computed-value"><UserChips ids={(value as string[] | null) ?? []} labels={labels} /></div>;
+  }
   if (COMPUTED_TYPES.has(field.type)) {
-    return <div className="computed-value">{cellToText(field, value) || <span className="muted">—</span>}</div>;
+    return <div className="computed-value">{cellToText(field, value, labels) || <span className="muted">—</span>}</div>;
   }
   switch (field.type) {
+    case "user":
+      return (
+        <div className="record-select">
+          <UserPicker field={field} value={value} autoFocus={false} onChange={(ids) => onSave(ids)} />
+        </div>
+      );
+    case "rating":
+      return <RatingInput max={field.options.max ?? 5} value={typeof value === "number" ? value : null} onChange={onSave} size={20} />;
+    case "currency":
+    case "percent":
+      return (
+        <div className={"affix-input" + (field.type === "percent" ? " suffix" : "")}>
+          {field.type === "currency" && <span>{field.options.symbol ?? "₹"}</span>}
+          <input
+            type="number" step="any" value={text}
+            onChange={(e) => setText(e.target.value)} onBlur={commit}
+            onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+          />
+          {field.type === "percent" && <span>%</span>}
+        </div>
+      );
+    case "duration":
+      return <DurationInput field={field} value={value} onSave={onSave} />;
     case "link":
       return (
         <div className="record-select">
@@ -139,6 +166,22 @@ function FieldInput({ field, value, labels, onSave }: { field: Field; value: Cel
         />
       );
   }
+}
+
+/** Shows "1:30"; accepts "1:30", "1h 30m", "90" (minutes)… — the server parses it. */
+function DurationInput({ field, value, onSave }: { field: Field; value: CellValue; onSave: (v: CellValue) => void }) {
+  const initial = value === null ? "" : cellToText(field, value);
+  const [text, setText] = useState(initial);
+  useEffect(() => setText(initial), [initial]);
+  return (
+    <input
+      value={text}
+      placeholder={field.options.durationFormat === "h:mm:ss" ? "h:mm:ss" : "h:mm"}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => text !== initial && onSave(text.trim() === "" ? null : text)}
+      onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+    />
+  );
 }
 
 function toLocalInput(iso: string) {

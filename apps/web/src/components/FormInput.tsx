@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 import type { PublicFormField } from "../api";
 import { CHOICE_COLORS } from "../colors";
 import { formatBytes } from "./attachmentUtils";
+import { RatingInput } from "./PeoplePicker";
 
 export interface UploadedFile { key: string; id?: string; filename: string; size: number; progress: number; error?: string }
 
@@ -23,6 +24,24 @@ export function FormInput({ field, value, onChange, upload, disabled }: Props) {
       return <textarea rows={4} disabled={disabled} value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)} />;
     case "number":
       return <input type="number" step="any" disabled={disabled} value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)} />;
+    case "currency":
+    case "percent":
+      return (
+        <div className={"affix-input" + (field.type === "percent" ? " suffix" : "")}>
+          {field.type === "currency" && <span>{field.options.symbol ?? "₹"}</span>}
+          <input type="number" step="any" disabled={disabled} value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)} />
+          {field.type === "percent" && <span>%</span>}
+        </div>
+      );
+    case "rating":
+      return <RatingInput max={field.options.max ?? 5} value={typeof value === "number" ? value : null} onChange={onChange} disabled={disabled} size={24} />;
+    case "duration":
+      return (
+        <input
+          disabled={disabled} placeholder={field.options.durationFormat === "h:mm:ss" ? "e.g. 1:30:00" : "e.g. 1:30"}
+          value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)}
+        />
+      );
     case "email":
       return <input type="email" disabled={disabled} placeholder="name@example.com" value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)} />;
     case "url":

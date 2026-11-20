@@ -149,7 +149,9 @@ async function main() {
   // Projects
   const projClient = await addField(projectsT, "Client", "link", { linkedTableId: clientsT });
   await addField(projectsT, "Services", "multipleSelect", { choices: choices(["Branding", "purple"], ["Website", "blue"], ["Social media", "pink"], ["Photography", "orange"], ["Video", "red"], ["Packaging", "teal"]) });
-  await addField(projectsT, "Budget", "number", { precision: 0 });
+  await addField(projectsT, "Budget", "currency", { symbol: "₹", precision: 0 });
+  await addField(projectsT, "Progress", "percent");
+  await addField(projectsT, "Client rating", "rating", { max: 5 });
   await addField(projectsT, "Start date", "date");
   await addField(projectsT, "Due date", "date");
   const coverF = await addField(projectsT, "Cover", "attachment");
@@ -171,6 +173,11 @@ async function main() {
   await addField(tasksT, "Due", "date");
   await addField(tasksT, "Hours", "number", { precision: 1 });
   await addField(tasksT, "Done", "checkbox");
+  await addField(tasksT, "Task no.", "autonumber");
+  await addField(tasksT, "Time spent", "duration");
+  await addField(tasksT, "Assignee", "user");
+  await addField(tasksT, "Created", "createdTime");
+  await addField(tasksT, "Last edited by", "lastModifiedBy");
   await addField(tasksT, "Days left", "formula", { formula: "IF(AND({Due}, NOT({Done})), DATETIME_DIFF({Due}, TODAY(), 'days'))" });
   await addField(tasksT, "Flag", "formula", {
     formula: "IF({Done}, '✓ Done', IF(AND({Due}, DATETIME_DIFF({Due}, TODAY(), 'days') < 0), '⚠ Overdue', IF({Priority} = 'High', '● Urgent', '')))",
@@ -178,7 +185,7 @@ async function main() {
 
   // Invoices
   const invProject = await addField(invoicesT, "Project", "link", { linkedTableId: projectsT });
-  await addField(invoicesT, "Amount", "number", { precision: 0 });
+  await addField(invoicesT, "Amount", "currency", { symbol: "₹", precision: 0 });
   await addField(invoicesT, "Issued", "date");
   await addField(invoicesT, "Due", "date");
   await addField(invoicesT, "Invoice PDF", "attachment");
@@ -235,6 +242,8 @@ async function main() {
   const projectIds = await batch(projectsT, projects.map(([name, client, status, services, budget, start, due, retainer, , , brief]) => ({
     Name: name, Client: client, Status: status, Services: services, Budget: budget, "Start date": day(start), "Due date": day(due),
     Retainer: retainer, Brief: brief,
+    Progress: status === "Delivered" ? 100 : status === "Review" ? 85 : status === "In progress" ? 50 : status === "Briefing" ? 15 : 0,
+    "Client rating": status === "Delivered" ? 5 : status === "Review" ? 4 : null,
   })));
   const projF = new Map((await fieldsOf(projectsT)).map((f) => [f.name, f]));
   for (const [i, p] of projects.entries()) {
@@ -269,6 +278,8 @@ async function main() {
   await batch(tasksT, taskNames.map(([name, project, status, priority], i) => ({
     Name: name, Project: project, Status: status, Priority: priority, Owner: owners[i % owners.length],
     Due: day(offsets[i]), Hours: [3, 6, 8, 4, 5, 1, 7, 10, 12, 4, 2, 3, 3, 9, 2, 4, 3, 2, 3, 1][i],
+    "Time spent": `${Math.floor([3, 6, 8, 4, 5, 1, 7, 10, 12, 4, 2, 3, 3, 9, 2, 4, 3, 2, 3, 1][i] * 0.8)}:${["00", "15", "30", "45"][i % 4]}`,
+    Assignee: i % 3 === 0 ? EMAIL : null,
     Done: status === "Done", Details: status === "Blocked" ? "Waiting for the client to approve the film edit." : "",
   })));
 

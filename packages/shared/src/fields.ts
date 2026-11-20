@@ -17,6 +17,16 @@ export const FIELD_TYPES = [
   "count",
   "formula",
   "attachment",
+  "currency",
+  "percent",
+  "rating",
+  "duration",
+  "user",
+  "autonumber",
+  "createdTime",
+  "lastModifiedTime",
+  "createdBy",
+  "lastModifiedBy",
 ] as const;
 
 export type FieldType = (typeof FIELD_TYPES)[number];
@@ -38,12 +48,30 @@ export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   count: "Count",
   formula: "Formula",
   attachment: "Attachment",
+  currency: "Currency",
+  percent: "Percent",
+  rating: "Rating",
+  duration: "Duration",
+  user: "User",
+  autonumber: "Autonumber",
+  createdTime: "Created time",
+  lastModifiedTime: "Last modified time",
+  createdBy: "Created by",
+  lastModifiedBy: "Last modified by",
 };
 
+/** Filled in by the server from the record itself (who/when), never typed. */
+export const SYSTEM_TYPES = new Set<FieldType>(["autonumber", "createdTime", "lastModifiedTime", "createdBy", "lastModifiedBy"]);
+/** Fields whose values are user ids (shown as people). */
+export const USER_TYPES = new Set<FieldType>(["user", "createdBy", "lastModifiedBy"]);
+/** Plain number fields with their own display (they filter, sort and calculate as numbers). */
+export const NUMBER_LIKE_TYPES = new Set<FieldType>(["number", "currency", "percent", "rating", "duration"]);
+export const DURATION_FORMATS = ["h:mm", "h:mm:ss"] as const;
+
 /** Fields whose values are calculated by the server and can't be typed into. */
-export const COMPUTED_TYPES = new Set<FieldType>(["lookup", "rollup", "count", "formula"]);
+export const COMPUTED_TYPES = new Set<FieldType>(["lookup", "rollup", "count", "formula", ...SYSTEM_TYPES]);
 /** Field types that can't be converted to or from another type (yet). */
-export const STRUCTURAL_TYPES = new Set<FieldType>(["link", "lookup", "rollup", "count", "formula", "attachment"]);
+export const STRUCTURAL_TYPES = new Set<FieldType>(["link", "lookup", "rollup", "count", "formula", "attachment", "user", ...SYSTEM_TYPES]);
 
 export const ROLLUP_AGGREGATIONS = ["sum", "avg", "min", "max", "count", "countAll", "join", "joinUnique"] as const;
 export type RollupAggregation = (typeof ROLLUP_AGGREGATIONS)[number];
@@ -87,6 +115,14 @@ export const fieldOptionsSchema = z
     /** formula: uses TODAY()/NOW(), so it is refreshed daily; computedOn is the last refresh day. */
     volatile: z.boolean().optional(),
     computedOn: z.string().optional(),
+    /** currency: symbol shown before the amount. */
+    symbol: z.string().max(5).optional(),
+    /** rating: number of stars (1–10). */
+    max: z.number().int().min(1).max(10).optional(),
+    /** duration: how it's shown. */
+    durationFormat: z.enum(DURATION_FORMATS).optional(),
+    /** user: allow more than one person. */
+    multiple: z.boolean().optional(),
     /** Who may edit this field's values: everyone who can edit (default), workspace team only, or creators only. */
     editAccess: z.enum(["all", "team", "creators"]).optional(),
   })
@@ -114,7 +150,9 @@ export class CellValidationError extends Error {}
  * numeric rollups/counts act like numbers, formulas like their result type.
  */
 export function effectiveType(field: Pick<Field, "type" | "options">): FieldType {
-  if (field.type === "count") return "number";
+  if (field.type === "count" || field.type === "autonumber" || NUMBER_LIKE_TYPES.has(field.type)) return "number";
+  if (field.type === "createdTime" || field.type === "lastModifiedTime") return "date";
+  if (field.type === "createdBy" || field.type === "lastModifiedBy") return "user";
   if (field.type === "rollup") return NUMERIC_ROLLUPS.has(field.options.aggregation ?? "sum") ? "number" : "singleLineText";
   if (field.type === "formula") {
     switch (field.options.resultType) {
@@ -135,6 +173,40 @@ export function formatNumber(n: number, precision?: number) {
   return precision === undefined
     ? n.toLocaleString(undefined, { maximumFractionDigits: 8 })
     : n.toLocaleString(undefined, { minimumFractionDigits: precision, maximumFractionDigits: precision });
+}
+
+/** Seconds → "1:30" (h:mm) or "1:30:05" (h:mm:ss). */
+export function formatDuration(seconds: number, format: string = "h:mm"): string {
+  const neg = seconds < 0;
+  const s = Math.round(Math.abs(seconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (neg ? "-" : "") + (format === "h:mm:ss" ? `${h}:${pad(m)}:${pad(sec)}` : `${h}:${pad(m)}`);
+}
+
+/**
+ * Typed text → seconds. "1:30" = 1 h 30 min, "1:30:05" adds seconds, "1h 30m" / "45m" / "2.5h" work too,
+ * and a plain number means minutes (as when typing into Airtable).
+ */
+export function parseDuration(text: string): number | null {
+  const t = text.trim().toLowerCase();
+  if (!t) return null;
+  let m = /^(-?)(\d+):(\d{1,2})(?::(\d{1,2}(?:\.\d+)?))?$/.exec(t);
+  if (m) return (m[1] ? -1 : 1) * (Number(m[2]) * 3600 + Number(m[3]) * 60 + Number(m[4] ?? 0));
+  m = /^(?:(\d+(?:\.\d+)?)\s*h(?:ours?|rs?)?)?\s*(?:(\d+(?:\.\d+)?)\s*m(?:in(?:utes?)?)?)?\s*(?:(\d+(?:\.\d+)?)\s*s(?:ec(?:onds?)?)?)?$/.exec(t);
+  if (m && (m[1] || m[2] || m[3])) return Math.round(Number(m[1] ?? 0) * 3600 + Number(m[2] ?? 0) * 60 + Number(m[3] ?? 0));
+  const n = Number(t.replace(/,/g, ""));
+  return Number.isFinite(n) ? Math.round(n * 60) : null;
+}
+
+/** Strip currency symbols, % signs, spaces and thousands separators from typed numbers. */
+function looseNumber(raw: unknown): number {
+  if (typeof raw === "number") return raw;
+  // Only symbols may lead ("₹", "$", "€"); letters mean it isn't a number.
+  const s = String(raw).replace(/[,\s%]/g, "").replace(/^(-?)[^\d.+\-\p{L}]+/u, "$1");
+  return s === "" ? NaN : Number(s);
 }
 
 /** Local display of a stored date ("YYYY-MM-DD" or full ISO). */
@@ -167,7 +239,25 @@ export function cellToText(field: Pick<Field, "type" | "options">, value: CellVa
     case "count":
     case "rollup":
     case "number":
+    case "autonumber":
       return typeof value === "number" ? formatNumber(value, field.options.precision) : String(value);
+    case "currency":
+      return typeof value === "number"
+        ? (value < 0 ? "-" : "") + (field.options.symbol ?? "₹") + formatNumber(Math.abs(value), field.options.precision ?? 2)
+        : String(value);
+    case "percent":
+      return typeof value === "number" ? formatNumber(value, field.options.precision ?? 0) + "%" : String(value);
+    case "rating":
+      return typeof value === "number" ? "★".repeat(Math.max(0, Math.round(value))) : String(value);
+    case "duration":
+      return typeof value === "number" ? formatDuration(value, field.options.durationFormat) : String(value);
+    case "createdTime":
+    case "lastModifiedTime":
+      return formatDateCell(String(value));
+    case "user":
+    case "createdBy":
+    case "lastModifiedBy":
+      return (Array.isArray(value) ? value : [String(value)]).map((id) => labels?.[id] || "Unknown user").join(", ");
     default:
       return Array.isArray(value) ? value.join(", ") : String(value);
   }
@@ -180,6 +270,14 @@ export function convertCell(
   value: CellValue,
 ): CellValue {
   if (value === null) return null;
+  // Between number-like fields keep the number itself, not its formatted text.
+  if (typeof value === "number" && NUMBER_LIKE_TYPES.has(to.type)) {
+    try {
+      return normalizeCell(to, to.type === "rating" ? Math.round(value) : value);
+    } catch {
+      return null;
+    }
+  }
   let raw: unknown = cellToText(from, value);
   if (to.type === "multipleSelect") raw = String(raw).split(",").map((s) => s.trim()).filter(Boolean);
   if (to.type === "checkbox") raw = raw === "" || raw === "0" || /^(false|no)$/i.test(String(raw)) ? false : true;
@@ -221,11 +319,33 @@ export function normalizeCell(field: Pick<Field, "type" | "options" | "name">, r
       if (/\s/.test(s)) fail("not a valid URL");
       return s;
     }
-    case "number": {
-      const n = typeof raw === "number" ? raw : Number(String(raw).replace(/,/g, "").trim());
+    case "number":
+    case "currency":
+    case "percent": {
+      const n = looseNumber(raw);
       if (!Number.isFinite(n)) fail("expected a number");
-      const p = field.options.precision;
+      const p = field.options.precision ?? (field.type === "currency" ? 2 : field.type === "percent" ? 0 : undefined);
       return p === undefined ? n : Number(n.toFixed(p));
+    }
+    case "rating": {
+      const n = looseNumber(raw);
+      const max = field.options.max ?? 5;
+      if (!Number.isInteger(n) || n < 0 || n > max) fail(`expected a whole number from 0 to ${max}`);
+      return n === 0 ? null : n;
+    }
+    case "duration": {
+      const n = typeof raw === "number" ? raw : parseDuration(String(raw));
+      if (n === null || !Number.isFinite(n)) fail('expected a duration like "1:30"');
+      return Math.round(n!);
+    }
+    case "user": {
+      const arr = Array.isArray(raw) ? raw : [raw];
+      const ids = [...new Set(arr.map((v) => {
+        if (typeof v !== "string" || !/^usr[0-9A-Za-z]{14}$/.test(v)) fail("expected user ids");
+        return v as string;
+      }))];
+      if (ids.length > 1 && !field.options.multiple) fail("only one person can be chosen");
+      return ids.length ? ids : null;
     }
     case "checkbox":
       if (typeof raw === "boolean") return raw || null;
@@ -277,6 +397,11 @@ export function normalizeCell(field: Pick<Field, "type" | "options" | "name">, r
     case "rollup":
     case "count":
     case "formula":
+    case "autonumber":
+    case "createdTime":
+    case "lastModifiedTime":
+    case "createdBy":
+    case "lastModifiedBy":
       return fail("this field is calculated automatically and can't be edited");
   }
 }

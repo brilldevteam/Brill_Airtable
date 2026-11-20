@@ -109,6 +109,7 @@ function compileCondition(field: Field, c: FilterCondition, p: P): string | null
 }
 
 function sortExpr(field: Field, p: P): string {
+  if (effectiveType(field) === "user") return `(SELECT lower(u.name) FROM users u WHERE u.id = (cells->${p(field.id)}->>0))`;
   const txt = `(cells->>${p(field.id)})`;
   switch (effectiveType(field)) {
     case "number":
@@ -120,6 +121,9 @@ function sortExpr(field: Field, p: P): string {
       return `array_position(${p((field.options.choices ?? []).map((c) => c.id))}::text[], ${txt})`;
     case "date":
       return txt;
+    case "user":
+      // People sort by name.
+      return `(SELECT lower(u.name) FROM users u WHERE u.id = (cells->${p(field.id)}->>0))`;
     default:
       return `lower(${txt})`;
   }

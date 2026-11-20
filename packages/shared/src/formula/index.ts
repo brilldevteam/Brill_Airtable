@@ -28,7 +28,19 @@ export function formulaTypeOf(field: Pick<Field, "type" | "options">): FType {
   switch (field.type) {
     case "number":
     case "count":
+    case "currency":
+    case "percent":
+    case "rating":
+    case "duration":
+    case "autonumber":
       return "number";
+    case "createdTime":
+    case "lastModifiedTime":
+      return "date";
+    case "user":
+    case "createdBy":
+    case "lastModifiedBy":
+      return "array";
     case "rollup":
       return ["join", "joinUnique"].includes(field.options.aggregation ?? "sum") ? "text" : "number";
     case "date":
@@ -94,7 +106,13 @@ export function cellToFormulaValue(field: Field, value: CellValue, labels: LinkL
   const choice = (id: string) => field.options.choices?.find((c) => c.id === id)?.name ?? null;
   switch (field.type) {
     case "date":
+    case "createdTime":
+    case "lastModifiedTime":
       return toDate(value as string);
+    case "user":
+    case "createdBy":
+    case "lastModifiedBy":
+      return (value as string[]).map((id) => labels[id] ?? "");
     case "checkbox":
       return value === true;
     case "singleSelect":

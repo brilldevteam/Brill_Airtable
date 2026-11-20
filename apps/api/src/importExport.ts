@@ -137,6 +137,19 @@ async function typecastCells(
       case "attachment":
         // Files can't come from text; the migration tool uploads them separately.
         break;
+      case "user": {
+        // People by email or name, among those who can open this base.
+        const wanted = (Array.isArray(text) ? text.map(String) : String(text).split(",")).map((x) => x.trim().toLowerCase()).filter(Boolean);
+        const people = await t.query<{ id: string; email: string; name: string }>(
+          `SELECT u.id, lower(u.email) AS email, lower(u.name) AS name FROM users u, tables tb JOIN bases b ON b.id = tb.base_id
+           WHERE tb.id = $1 AND (EXISTS (SELECT 1 FROM workspace_members m WHERE m.workspace_id = b.workspace_id AND m.user_id = u.id)
+             OR EXISTS (SELECT 1 FROM base_members bm WHERE bm.base_id = b.id AND bm.user_id = u.id))`,
+          [tableId],
+        );
+        const ids = wanted.map((w) => people.find((p) => p.id === w || p.email === w || p.name === w)?.id).filter((x): x is string => !!x);
+        out[f.id] = f.options.multiple ? ids : ids.slice(0, 1);
+        break;
+      }
       default:
         out[f.id] = typeof text === "string" ? text : String(text);
     }
@@ -244,7 +257,7 @@ export function registerImportExport(app: FastifyInstance, db: Db) {
               text = ((v as string[]) ?? []).map((id) => (files[id] ? `${files[id].filename} (${origin}${files[id].url})` : "")).join(", ");
             } else if (f.type === "checkbox" || (f.type === "formula" && f.options.resultType === "boolean")) {
               text = v ? "checked" : "";
-            } else if (isNumericField(f) && typeof v === "number") {
+            } else if (isNumericField(f) && typeof v === "number" && f.type !== "duration") {
               text = String(v);
             } else {
               text = cellToText(f, v, labels);

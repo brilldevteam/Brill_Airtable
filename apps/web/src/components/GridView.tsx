@@ -13,10 +13,11 @@ import { cellToText, COMPUTED_TYPES, FIELD_TYPE_LABELS, orderedFieldIds, type Ce
 import { useCallback, useMemo, useRef, useState } from "react";
 import { ArrowDownWideNarrow, ArrowUpNarrowWide, EyeOff, Maximize2, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useDialogs } from "./Dialogs";
-import { GRID_ICONS } from "./fieldIcons";
+import { CUSTOM_HEADER_ICONS, GRID_ICONS } from "./fieldIcons";
 import { AttachmentStrip, AttachmentTiles } from "./AttachmentPicker";
 import { gridBadge } from "./attachmentUtils";
 import { LinkPicker } from "./LinkPicker";
+import { RatingInput, UserPicker } from "./PeoplePicker";
 import { Popover, SelectPicker, type Anchor } from "./Popover";
 import type { ViewContext } from "./TableWorkspace";
 
@@ -26,6 +27,31 @@ export const TYPE_ICON: Record<string, string> = {
   link: "↗", lookup: "⤷", rollup: "Σ", count: "№", formula: "ƒ",
 };
 const ROW_HEIGHT = { short: 34, medium: 56, tall: 90 };
+
+/** Rating cells: gold stars for the score, light grey for the rest. */
+function drawStars(ctx: CanvasRenderingContext2D, rect: { x: number; y: number; width: number; height: number }, max: number, value: number) {
+  const size = 13;
+  const gap = 3;
+  const cy = rect.y + rect.height / 2;
+  ctx.save();
+  for (let i = 0; i < max; i++) {
+    const cx = rect.x + 10 + size / 2 + i * (size + gap);
+    if (cx + size / 2 > rect.x + rect.width - 4) break;
+    ctx.beginPath();
+    for (let p = 0; p < 10; p++) {
+      const r = p % 2 === 0 ? size / 2 : size / 4.6;
+      const a = -Math.PI / 2 + (p * Math.PI) / 5;
+      const x = cx + r * Math.cos(a);
+      const y = cy + r * Math.sin(a);
+      if (p === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = i < value ? "#f59e0b" : "#e4e4e7";
+    ctx.fill();
+  }
+  ctx.restore();
+}
 const emptySelection: GridSelection = { columns: CompactSelection.empty(), rows: CompactSelection.empty() };
 
 export function GridView({ ctx }: { ctx: ViewContext }) {
@@ -110,6 +136,31 @@ export function GridView({ ctx }: { ctx: ViewContext }) {
             displayData: typeof v === "number" ? v.toLocaleString(undefined, { minimumFractionDigits: p, maximumFractionDigits: p }) : "",
           };
         }
+        case "currency":
+        case "percent":
+          return {
+            kind: GridCellKind.Number, data: typeof v === "number" ? v : undefined, allowOverlay: true, contentAlign: "right",
+            displayData: cellToText(f, v),
+          };
+        case "rating":
+          // Stars; Enter or double-click opens the star picker. Typing/pasting a number also works.
+          return { kind: GridCellKind.Text, data: typeof v === "number" ? String(v) : "", displayData: cellToText(f, v), allowOverlay: false };
+        case "duration":
+          return { kind: GridCellKind.Text, data: cellToText(f, v), displayData: cellToText(f, v), allowOverlay: true, contentAlign: "right" };
+        case "autonumber":
+          return { kind: GridCellKind.Number, data: typeof v === "number" ? v : undefined, displayData: cellToText(f, v), allowOverlay: false, readonly: true, contentAlign: "right" };
+        case "createdTime":
+        case "lastModifiedTime": {
+          const text = cellToText(f, v);
+          return { kind: GridCellKind.Text, data: text, displayData: text, allowOverlay: false, readonly: true };
+        }
+        case "user":
+        case "createdBy":
+        case "lastModifiedBy":
+          return {
+            kind: GridCellKind.Bubble, data: cellToText(f, v, labels).split(", ").filter(Boolean), allowOverlay: false,
+            ...(f.type === "user" ? {} : { readonly: true }),
+          } as GridCell;
         case "checkbox":
           return { kind: GridCellKind.Boolean, data: v === true, allowOverlay: false };
         case "singleSelect":
@@ -170,7 +221,7 @@ export function GridView({ ctx }: { ctx: ViewContext }) {
     if (!ctx.canEdit) { const r = rows[row]; if (r) ctx.openRecord(r.id); return; }
     const f = fields[col];
     const r = rows[row];
-    if (!f || !r || !["singleSelect", "multipleSelect", "link", "attachment"].includes(f.type)) return;
+    if (!f || !r || !["singleSelect", "multipleSelect", "link", "attachment", "rating", "user"].includes(f.type)) return;
     if (!ctx.canEditField(f) && f.type !== "attachment") return;
     const b = gridRef.current?.getBounds(col, row);
     if (b) setPicker({ field: f, recordId: r.id, anchor: b });
@@ -233,6 +284,13 @@ export function GridView({ ctx }: { ctx: ViewContext }) {
           rightElement={ctx.canDesign ? <button className="add-col" title="Add field" onClick={() => ctx.editField()}><Plus size={16} /></button> : undefined}
           rightElementProps={{ fill: false, sticky: false }}
           theme={GRID_THEME}
+          headerIcons={CUSTOM_HEADER_ICONS}
+          drawCell={(args, drawContent) => {
+            const f = fields[args.col];
+            if (f?.type !== "rating") return drawContent();
+            const v = rows[args.row]?.cells[f.id];
+            drawStars(args.ctx, args.rect, f.options.max ?? 5, typeof v === "number" ? v : 0);
+          }}
         />
       </div>
 
@@ -311,7 +369,7 @@ export function GridView({ ctx }: { ctx: ViewContext }) {
           onClose={() => setPicker(null)}
           cover={picker.field.type === "attachment"}
           className={picker.field.type === "attachment" ? "att-cell-pop" : ""}
-          minWidth={picker.field.type === "attachment" ? Math.max(picker.anchor.width + 2, 220) : picker.field.type === "link" ? 300 : 200}
+          minWidth={picker.field.type === "attachment" ? Math.max(picker.anchor.width + 2, 220) : picker.field.type === "link" || picker.field.type === "user" ? 280 : picker.field.type === "rating" ? 0 : 200}
         >
           {picker.field.type === "attachment" ? (
             <AttachmentStrip
@@ -321,6 +379,24 @@ export function GridView({ ctx }: { ctx: ViewContext }) {
               onFiles={ctx.addFiles}
               onChange={(ids) => saveCells(picker.recordId, { [picker.field.id]: ids.length ? ids : null })}
               onExpand={() => { setExpanded({ field: picker.field, recordId: picker.recordId }); setPicker(null); }}
+            />
+          ) : picker.field.type === "rating" ? (
+            <div className="rating-pop">
+              <RatingInput
+                max={picker.field.options.max ?? 5}
+                size={22}
+                value={(pickerRecord.cells[picker.field.id] as number | undefined) ?? null}
+                onChange={(n) => { saveCells(picker.recordId, { [picker.field.id]: n }); setPicker(null); }}
+              />
+            </div>
+          ) : picker.field.type === "user" ? (
+            <UserPicker
+              field={picker.field}
+              value={(pickerRecord.cells[picker.field.id] ?? null) as CellValue}
+              onChange={(ids) => {
+                saveCells(picker.recordId, { [picker.field.id]: ids });
+                if (!picker.field.options.multiple) setPicker(null);
+              }}
             />
           ) : picker.field.type === "link" ? (
             <LinkPicker

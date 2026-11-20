@@ -286,4 +286,20 @@ export function registerMembers(app: FastifyInstance, db: Db, opts: { mailer: Ma
     if (!r) throw new HttpError(404, "Not a member of this base");
     return { ok: true };
   });
+
+  /** People who can open this base — for user fields and "assigned to" filters. */
+  app.get("/api/bases/:baseId/collaborators", async (req) => {
+    const user = requireUser(req);
+    const { baseId } = req.params as { baseId: string };
+    const access = await baseAccess(db, user.id, baseId, "read");
+    const rows = await db.query<{ id: string; name: string; email: string }>(
+      `SELECT u.id, u.name, u.email FROM users u JOIN bases b ON b.id = $1
+       WHERE EXISTS (SELECT 1 FROM workspace_members m WHERE m.workspace_id = b.workspace_id AND m.user_id = u.id)
+          OR EXISTS (SELECT 1 FROM base_members bm WHERE bm.base_id = b.id AND bm.user_id = u.id)
+       ORDER BY lower(u.name)`,
+      [baseId],
+    );
+    // People invited to just this base don't see everyone's email address.
+    return { users: rows.map((r) => ({ id: r.id, name: r.name, email: access.guest && r.id !== user.id ? "" : r.email })) };
+  });
 }

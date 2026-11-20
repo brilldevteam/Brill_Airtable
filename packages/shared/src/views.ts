@@ -20,6 +20,8 @@ export type FilterOperator =
   | (typeof MULTI_SELECT_OPS)[number]
   | (typeof DATE_OPS)[number];
 
+/** People fields: pick people from the base's collaborators. */
+export const USER_OPS = ["hasAnyOf", "hasNoneOf", "isEmpty", "isNotEmpty"] as const;
 /** Link fields: only emptiness for now (matching on linked names needs a join). */
 export const LINK_OPS = ["isEmpty", "isNotEmpty"] as const;
 /** Lookups hold a list of texts. */
@@ -32,6 +34,7 @@ export function operatorsFor(field: Pick<Field, "type" | "options">): readonly F
     case "singleSelect": return SINGLE_SELECT_OPS;
     case "multipleSelect": return MULTI_SELECT_OPS;
     case "date": return DATE_OPS;
+    case "user": return USER_OPS;
     case "link":
     case "attachment":
       return LINK_OPS;
@@ -115,6 +118,7 @@ export const viewConfigSchema = z.object({
 /** Field types a public form can ask for (no calculated fields; no links, which would expose other records). */
 export const FORM_FIELD_TYPES = new Set<FieldType>([
   "singleLineText", "longText", "number", "checkbox", "singleSelect", "multipleSelect", "date", "email", "url", "phone", "attachment",
+  "currency", "percent", "rating", "duration",
 ]);
 
 /** Can this field place records on a calendar? */

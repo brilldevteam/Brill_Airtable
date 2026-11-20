@@ -1,5 +1,7 @@
 import {
   COMPUTED_TYPES,
+  SYSTEM_TYPES,
+  USER_TYPES,
   MODIFIED_DEP,
   NUMERIC_ROLLUPS,
   cellToFormulaValue,
@@ -28,11 +30,19 @@ const toField = (r: any): Field => ({
   id: r.id, tableId: r.table_id, name: r.name, type: r.type, options: r.options ?? {}, position: r.position,
 });
 
-export interface RecordMeta { id: string; createdAt: Date; updatedAt: Date }
-const metaOf = (r: any): RecordMeta => ({ id: r.id, createdAt: new Date(r.created_at), updatedAt: new Date(r.updated_at) });
+export interface RecordMeta { id: string; createdAt: Date; updatedAt: Date; createdBy: string | null; updatedBy: string | null }
+const metaOf = (r: any): RecordMeta => ({
+  id: r.id, createdAt: new Date(r.created_at), updatedAt: new Date(r.updated_at),
+  createdBy: r.created_by ?? null, updatedBy: r.updated_by ?? null,
+});
+/** Columns metaOf needs. */
+const META_COLS = "id, cells, created_at, updated_at, created_by, updated_by";
 
 /** Does a computed field need recomputing when these fields of the same record changed? */
 function dependsOnChanged(f: Field, changed: Set<string>): boolean {
+  // "Last modified" fields follow every edit; the other system fields are set once, at creation.
+  if (f.type === "lastModifiedTime" || f.type === "lastModifiedBy") return changed.has(MODIFIED_DEP);
+  if (SYSTEM_TYPES.has(f.type)) return false;
   if (f.type === "formula") return (f.options.dependsOn ?? []).some((d) => changed.has(d));
   return COMPUTED_TYPES.has(f.type) && changed.has(f.options.linkFieldId ?? "");
 }
@@ -121,6 +131,21 @@ export async function assertLinkTargets(db: Db, field: Field, ids: string[]) {
 
 /** Calculate a lookup / rollup / count / formula value for one record. */
 export async function computeValue(db: Db, schema: Schema, field: Field, cells: Cells, meta?: RecordMeta): Promise<CellValue> {
+  switch (field.type) {
+    case "autonumber": {
+      // Numbers are given once and never reused, even after records are deleted.
+      if (typeof cells[field.id] === "number") return cells[field.id];
+      await db.query(`SELECT 1 FROM fields WHERE id=$1 FOR UPDATE`, [field.id]);
+      const r = await db.one<{ n: string }>(
+        `SELECT COALESCE(MAX((cells->>$2)::bigint), 0) + 1 AS n FROM records WHERE table_id=$1`, [field.tableId, field.id],
+      );
+      return Number(r!.n);
+    }
+    case "createdTime": return meta ? meta.createdAt.toISOString() : (cells[field.id] ?? null);
+    case "lastModifiedTime": return meta ? meta.updatedAt.toISOString() : (cells[field.id] ?? null);
+    case "createdBy": return meta ? (meta.createdBy ? [meta.createdBy] : null) : (cells[field.id] ?? null);
+    case "lastModifiedBy": return meta ? (meta.updatedBy ? [meta.updatedBy] : null) : (cells[field.id] ?? null);
+  }
   if (field.type === "formula") {
     const compiled = await schema.formula(field);
     if (!compiled) return null;
@@ -131,6 +156,7 @@ export async function computeValue(db: Db, schema: Schema, field: Field, cells: 
     const linkIds = idsOf("link");
     const labels = linkIds.length ? await labelsFor(db, schema, linkIds) : {};
     Object.assign(labels, await attachmentNames(db, idsOf("attachment")));
+    Object.assign(labels, await userNames(db, [...idsOf("user"), ...idsOf("createdBy"), ...idsOf("lastModifiedBy")]));
     const now = new Date();
     return runFormula(compiled.ast, compiled.resultType, {
       field: (id) => {
@@ -157,12 +183,14 @@ export async function computeValue(db: Db, schema: Schema, field: Field, cells: 
     let labels: LinkLabels = {};
     if (target.type === "link") labels = await labelsFor(db, schema, raw.flatMap((v) => (Array.isArray(v) ? v : [])));
     if (target.type === "attachment") labels = await attachmentNames(db, raw.flatMap((v) => (Array.isArray(v) ? v : [])));
+    if (USER_TYPES.has(target.type)) labels = await userNames(db, raw.flatMap((v) => (Array.isArray(v) ? v : [])));
     const texts: string[] = [];
     for (const v of raw) {
       if (v === null) continue;
       if (target.type === "lookup" && Array.isArray(v)) texts.push(...v);
       else if (target.type === "link" && Array.isArray(v)) texts.push(...v.map((id) => labels[id] || "Unnamed record"));
       else if (target.type === "attachment" && Array.isArray(v)) texts.push(...v.map((id) => labels[id] || "file"));
+      else if (USER_TYPES.has(target.type) && Array.isArray(v)) texts.push(...v.map((id) => labels[id] || "Unknown user"));
       else if (target.type === "multipleSelect" && Array.isArray(v)) texts.push(...cellToText(target, v).split(", "));
       else {
         const t = cellToText(target, v);
@@ -210,7 +238,7 @@ export async function propagate(db: Db, schema: Schema, initial: Change[]) {
     // 1. This record's own lookups/rollups/counts that follow a link field that changed.
     const own = tableFields.filter((f) => dependsOnChanged(f, changed));
     if (own.length) {
-      const row = await db.one(`SELECT id, cells, created_at, updated_at FROM records WHERE id=$1 AND deleted_at IS NULL`, [recordId]);
+      const row = await db.one(`SELECT ${META_COLS} FROM records WHERE id=$1 AND deleted_at IS NULL`, [recordId]);
       if (row) {
         let cells: Cells = row.cells;
         const updated = new Set<string>();
@@ -299,7 +327,7 @@ export async function writeCells(
         other.id, withCell(other.cells, inv, next), userId,
       ]);
       await logHistory(db, other.id, userId, "update", { [inv]: { from: cur.length ? cur : null, to: next.length ? next : null } });
-      changes.push({ recordId: other.id, tableId: other.table_id, fields: new Set([inv]) });
+      changes.push({ recordId: other.id, tableId: other.table_id, fields: new Set([inv, MODIFIED_DEP]) });
     }
   }
   await propagate(db, schema, changes);
@@ -319,7 +347,7 @@ export async function unlinkRecord(db: Db, schema: Schema, userId: string, table
     for (const r of rows) {
       const next = ((r.cells[lf.id] as string[]) ?? []).filter((id) => id !== recordId);
       await db.query(`UPDATE records SET cells=$2, updated_at=now(), updated_by=$3 WHERE id=$1`, [r.id, withCell(r.cells, lf.id, next), userId]);
-      changes.push({ recordId: r.id, tableId: lf.tableId, fields: new Set([lf.id]) });
+      changes.push({ recordId: r.id, tableId: lf.tableId, fields: new Set([lf.id, MODIFIED_DEP]) });
     }
   }
   await propagate(db, schema, changes);
@@ -328,10 +356,22 @@ export async function unlinkRecord(db: Db, schema: Schema, userId: string, table
 /** (Re)compute one computed field for every record of its table, then propagate. */
 export async function recomputeField(db: Db, schema: Schema, field: Field) {
   const rows = await db.query(
-    `SELECT id, cells, created_at, updated_at FROM records WHERE table_id=$1 AND deleted_at IS NULL`,
+    `SELECT ${META_COLS} FROM records WHERE table_id=$1 AND deleted_at IS NULL ORDER BY created_at, autonumber`,
     [field.tableId],
   );
   const changes: Change[] = [];
+  if (field.type === "autonumber") {
+    // Number existing records in the order they were created.
+    let n = 0;
+    for (const r of rows) n = Math.max(n, typeof r.cells[field.id] === "number" ? r.cells[field.id] : 0);
+    for (const r of rows) {
+      if (typeof r.cells[field.id] === "number") continue;
+      await db.query(`UPDATE records SET cells=$2 WHERE id=$1`, [r.id, withCell(r.cells, field.id, ++n)]);
+      changes.push({ recordId: r.id, tableId: field.tableId, fields: new Set([field.id]) });
+    }
+    await propagate(db, schema, changes);
+    return;
+  }
   for (const r of rows) {
     const v = await computeValue(db, schema, field, r.cells, metaOf(r));
     if (!sameValue(r.cells[field.id], v)) {
@@ -360,7 +400,7 @@ export async function dependentFieldNames(db: Db, fieldId: string): Promise<stri
 export async function computeAllForRecord(db: Db, schema: Schema, tableId: string, recordId: string) {
   const computed = (await schema.fields(tableId)).filter((f) => COMPUTED_TYPES.has(f.type));
   if (computed.length === 0) return;
-  const row = await db.one(`SELECT id, cells, created_at, updated_at FROM records WHERE id=$1`, [recordId]);
+  const row = await db.one(`SELECT ${META_COLS} FROM records WHERE id=$1`, [recordId]);
   if (!row) return;
   let cells: Cells = row.cells;
   const changed = new Set<string>();
@@ -379,6 +419,13 @@ export async function computeAllForRecord(db: Db, schema: Schema, tableId: strin
   if (changed.size === 0) return;
   await db.query(`UPDATE records SET cells=$2 WHERE id=$1`, [recordId, cells]);
   await propagate(db, schema, [{ recordId, tableId, fields: changed }]);
+}
+
+/** Names of people, by user id. */
+export async function userNames(db: Db, ids: string[]): Promise<LinkLabels> {
+  if (!ids.length) return {};
+  const rows = await db.query<{ id: string; name: string }>(`SELECT id, name FROM users WHERE id = ANY($1::text[])`, [[...new Set(ids)]]);
+  return Object.fromEntries(rows.map((r) => [r.id, r.name]));
 }
 
 /** Filenames of attachments, by id. */

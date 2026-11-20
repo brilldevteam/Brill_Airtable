@@ -24,6 +24,8 @@ import {
   viewConfigSchema,
   isDateLike,
   FORM_FIELD_TYPES,
+  DURATION_FORMATS,
+  USER_TYPES,
 } from "@brill/shared";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -34,7 +36,7 @@ import type { Db } from "./db";
 import { HttpError } from "./errors";
 import { assertAttachments, attachmentInfos } from "./files";
 import {
-  assertLinkTargets, computeAllForRecord, dependentFieldNames, labelsFor, logHistory, recomputeField, Schema, unlinkRecord, writeCells,
+  assertLinkTargets, computeAllForRecord, dependentFieldNames, labelsFor, logHistory, recomputeField, Schema, unlinkRecord, userNames, writeCells,
 } from "./links";
 
 // ---------- row mappers ----------
@@ -68,6 +70,10 @@ const fieldOptionsInput = z
     aggregation: z.enum(ROLLUP_AGGREGATIONS).optional(),
     /** formula: as typed, with {Field Name} references. */
     formula: z.string().max(5000).optional(),
+    symbol: z.string().max(5).optional(),
+    max: z.number().int().min(1).max(10).optional(),
+    durationFormat: z.enum(DURATION_FORMATS).optional(),
+    multiple: z.boolean().optional(),
   })
   .optional();
 const COLORS = ["blue", "cyan", "teal", "green", "yellow", "orange", "red", "pink", "purple", "gray"];
@@ -76,6 +82,14 @@ function buildOptions(type: FieldType, input: z.infer<typeof fieldOptionsInput>)
   const o = input ?? {};
   const opts: Record<string, unknown> = {};
   if (type === "number") opts.precision = o.precision ?? 0;
+  if (type === "currency") {
+    opts.precision = o.precision ?? 2;
+    opts.symbol = (o.symbol ?? "₹").trim().slice(0, 5) || "₹";
+  }
+  if (type === "percent") opts.precision = o.precision ?? 0;
+  if (type === "rating") opts.max = Math.min(10, Math.max(1, o.max ?? 5));
+  if (type === "duration") opts.durationFormat = o.durationFormat ?? "h:mm";
+  if (type === "user") opts.multiple = o.multiple ?? false;
   if (type === "date") opts.includeTime = o.includeTime ?? false;
   if (type === "singleSelect" || type === "multipleSelect") {
     const seen = new Set<string>();
@@ -110,6 +124,7 @@ export async function prepareCells(t: Db, tableId: string, input: Record<string,
     const f = fields.find((x) => x.id === fid)!;
     if (f.type === "link" && Array.isArray(v)) await assertLinkTargets(t, f, v);
     if (f.type === "attachment" && Array.isArray(v)) await assertAttachments(t, tableId, f.name, v);
+    if (f.type === "user" && Array.isArray(v)) await assertCollaborators(t, tableId, f.name, v);
   }
   return cells;
 }
@@ -712,7 +727,22 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
 }
 
 /** Fields allowed as a table's primary (first) field. */
-const PRIMARY_TYPES = new Set<FieldType>(["singleLineText", "longText", "number", "singleSelect", "date", "email", "url", "phone"]);
+const PRIMARY_TYPES = new Set<FieldType>([
+  "singleLineText", "longText", "number", "singleSelect", "date", "email", "url", "phone", "currency", "percent", "duration", "autonumber",
+]);
+
+/** People in a user field must be able to open the base (workspace members or people invited to it). */
+async function assertCollaborators(t: Db, tableId: string, fieldName: string, ids: string[]) {
+  if (!ids.length) return;
+  const rows = await t.query<{ id: string }>(
+    `SELECT u.id FROM users u, tables tb JOIN bases b ON b.id = tb.base_id
+     WHERE tb.id = $1 AND u.id = ANY($2::text[])
+       AND (EXISTS (SELECT 1 FROM workspace_members m WHERE m.workspace_id = b.workspace_id AND m.user_id = u.id)
+         OR EXISTS (SELECT 1 FROM base_members bm WHERE bm.base_id = b.id AND bm.user_id = u.id))`,
+    [tableId, ids],
+  );
+  if (rows.length !== new Set(ids).size) throw new HttpError(422, `${fieldName}: that person doesn't have access to this base`);
+}
 
 function safeNormalize(field: Field, value: CellValue): CellValue {
   try {
@@ -732,5 +762,6 @@ export async function displayData(db: Db, fields: Field[], records: RecordRow[])
   const labels = await labelsFor(db, new Schema(db), ids("link"));
   const files = await attachmentInfos(db, ids("attachment"));
   for (const f of Object.values(files)) labels[f.id] = f.filename;
+  Object.assign(labels, await userNames(db, [...USER_TYPES].flatMap((t) => ids(t))));
   return { labels, files };
 }

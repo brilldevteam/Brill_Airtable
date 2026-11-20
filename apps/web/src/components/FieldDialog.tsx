@@ -28,14 +28,45 @@ interface Props {
   onClose: () => void;
 }
 
-const PRIMARY_TYPES = new Set<FieldType>(["singleLineText", "longText", "number", "singleSelect", "date", "email", "url", "phone"]);
+const PRIMARY_TYPES = new Set<FieldType>([
+  "singleLineText", "longText", "number", "singleSelect", "date", "email", "url", "phone", "currency", "percent", "duration", "autonumber",
+]);
+
+/** The type list, grouped like Airtable's. */
+const TYPE_GROUPS: [string, FieldType[]][] = [
+  ["Text", ["singleLineText", "longText", "email", "url", "phone"]],
+  ["Numbers", ["number", "currency", "percent", "rating", "duration", "autonumber"]],
+  ["Choices & dates", ["singleSelect", "multipleSelect", "checkbox", "date", "attachment"]],
+  ["People", ["user", "createdBy", "lastModifiedBy"]],
+  ["Automatic", ["createdTime", "lastModifiedTime", "formula"]],
+  ["Linked records", ["link", "lookup", "rollup", "count"]],
+];
+
+/** What each new kind of field does, shown under the type picker. */
+const TYPE_HINTS: Partial<Record<FieldType, string>> = {
+  currency: "An amount of money, shown with its symbol.",
+  percent: "A percentage — type 40 for 40%.",
+  rating: "Stars from 1 to the maximum you choose.",
+  duration: "A length of time. Type 1:30, 1h 30m, or 90 (minutes).",
+  user: "Pick people who can open this base — e.g. who a task is assigned to.",
+  autonumber: "Numbers every record 1, 2, 3… in the order they were created. Numbers are never reused.",
+  createdTime: "When each record was created. Filled in automatically.",
+  lastModifiedTime: "When any field of the record was last changed. Filled in automatically.",
+  createdBy: "Who created each record. Filled in automatically.",
+  lastModifiedBy: "Who last changed each record. Filled in automatically.",
+};
+const DEFAULT_PRECISION: Partial<Record<FieldType, number>> = { currency: 2, percent: 0, number: 0 };
 
 export function FieldDialog({ field, isPrimary, tableId, tables, tableFields, onSave, onClose }: Props) {
   const o = field?.options ?? {};
   const [name, setName] = useState(field?.name ?? "");
   const [type, setType] = useState<FieldType>(field?.type ?? "singleLineText");
   const [editAccess, setEditAccess] = useState<EditAccess>(field?.options.editAccess ?? "all");
-  const [precision, setPrecision] = useState(o.precision ?? 0);
+  const [precision, setPrecision] = useState(o.precision ?? DEFAULT_PRECISION[field?.type ?? "number"] ?? 0);
+  const [symbol, setSymbol] = useState(o.symbol ?? "₹");
+  const [maxStars, setMaxStars] = useState(o.max ?? 5);
+  const [durationFormat, setDurationFormat] = useState<"h:mm" | "h:mm:ss">(o.durationFormat ?? "h:mm");
+  const [multiplePeople, setMultiplePeople] = useState(o.multiple ?? false);
   const [includeTime, setIncludeTime] = useState(o.includeTime ?? false);
   const [choicesText, setChoicesText] = useState((o.choices ?? []).map((c) => c.name).join("\n"));
   const [linkedTableId, setLinkedTableId] = useState(o.linkedTableId ?? tables.find((t) => t.id !== tableId)?.id ?? tableId);
@@ -78,7 +109,14 @@ export function FieldDialog({ field, isPrimary, tableId, tables, tableFields, on
     e.preventDefault();
     setError(null);
     const options: FieldInput["options"] = {};
-    if (type === "number") options.precision = precision;
+    if (type === "number" || type === "percent") options.precision = precision;
+    if (type === "currency") {
+      options.precision = precision;
+      options.symbol = symbol.trim() || "₹";
+    }
+    if (type === "rating") options.max = maxStars;
+    if (type === "duration") options.durationFormat = durationFormat;
+    if (type === "user") options.multiple = multiplePeople;
     if (type === "date") options.includeTime = includeTime;
     if (isSelect) {
       // Keep existing choice ids (and colours) for names that didn't change.
@@ -133,10 +171,66 @@ export function FieldDialog({ field, isPrimary, tableId, tables, tableFields, on
         </label>
         <label>
           Field type
-          <select value={type} onChange={(e) => setType(e.target.value as FieldType)} disabled={editingStructural}>
-            {allowedTypes.map((t) => <option key={t} value={t}>{FIELD_TYPE_LABELS[t]}</option>)}
+          <select
+            value={type}
+            disabled={editingStructural}
+            onChange={(e) => {
+              const t = e.target.value as FieldType;
+              setType(t);
+              if (!field && DEFAULT_PRECISION[t] !== undefined) setPrecision(DEFAULT_PRECISION[t]!);
+            }}
+          >
+            {TYPE_GROUPS.map(([group, types]) => {
+              const shown = types.filter((t) => allowedTypes.includes(t));
+              return shown.length ? (
+                <optgroup key={group} label={group}>
+                  {shown.map((t) => <option key={t} value={t}>{FIELD_TYPE_LABELS[t]}</option>)}
+                </optgroup>
+              ) : null;
+            })}
           </select>
+          {TYPE_HINTS[type] && <span className="field-hint">{TYPE_HINTS[type]}</span>}
         </label>
+
+        {type === "currency" && (
+          <label>
+            Currency symbol
+            <select value={["₹", "$", "€", "£", "AED", "¥"].includes(symbol) ? symbol : "other"} onChange={(e) => setSymbol(e.target.value === "other" ? "" : e.target.value)}>
+              <option value="₹">₹ Indian rupee</option>
+              <option value="$">$ Dollar</option>
+              <option value="€">€ Euro</option>
+              <option value="£">£ Pound</option>
+              <option value="AED">AED Dirham</option>
+              <option value="¥">¥ Yen / Yuan</option>
+              <option value="other">Other…</option>
+            </select>
+            {!["₹", "$", "€", "£", "AED", "¥"].includes(symbol) && (
+              <input value={symbol} maxLength={5} placeholder="e.g. SGD" onChange={(e) => setSymbol(e.target.value)} />
+            )}
+          </label>
+        )}
+        {type === "rating" && (
+          <label>
+            Maximum stars
+            <select value={maxStars} onChange={(e) => setMaxStars(Number(e.target.value))}>
+              {[3, 4, 5, 6, 7, 8, 9, 10].map((n) => <option key={n} value={n}>{"★".repeat(n)}  ({n})</option>)}
+            </select>
+          </label>
+        )}
+        {type === "duration" && (
+          <label>
+            Format
+            <select value={durationFormat} onChange={(e) => setDurationFormat(e.target.value as "h:mm" | "h:mm:ss")}>
+              <option value="h:mm">h:mm (1:30)</option>
+              <option value="h:mm:ss">h:mm:ss (1:30:00)</option>
+            </select>
+          </label>
+        )}
+        {type === "user" && (
+          <label className="row">
+            <input type="checkbox" checked={multiplePeople} onChange={(e) => setMultiplePeople(e.target.checked)} /> Allow more than one person
+          </label>
+        )}
 
         {type === "formula" && (
           <label>
@@ -144,7 +238,7 @@ export function FieldDialog({ field, isPrimary, tableId, tables, tableFields, on
             <FormulaEditor value={formula} onChange={setFormula} fields={tableFields} selfId={field?.id} />
           </label>
         )}
-        {(type === "number" || (type === "rollup" && NUMERIC_ROLLUPS.has(aggregation)) || (type === "formula" && formulaType === "number")) && (
+        {(type === "number" || type === "currency" || type === "percent" || (type === "rollup" && NUMERIC_ROLLUPS.has(aggregation)) || (type === "formula" && formulaType === "number")) && (
           <label>
             Decimal places
             <select value={precision} onChange={(e) => setPrecision(Number(e.target.value))}>

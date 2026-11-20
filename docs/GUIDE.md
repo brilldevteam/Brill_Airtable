@@ -52,6 +52,14 @@ Click **+** at the end of the header row, or a column's menu, to add or edit a f
 | Date | With or without a time of day. |
 | Email, URL, Phone | |
 | **Attachment** | Files, images, video, audio and PDF, up to 25 MB each. |
+| **Currency** | An amount with its symbol (₹ by default, or $, €, £, AED…). Type "₹12,500" or just 12500. |
+| **Percent** | Type 40 for 40%. |
+| **Rating** | 1 to 10 stars (5 by default). Click a star in the grid or record form; click it again to clear it. |
+| **Duration** | Time spent, shown as 1:30 (or 1:30:00). Type "1:30", "1h 30m", "45m", or a plain number of minutes. |
+| **User** | Assign people, such as who a task is for. You can only pick people who can open the base; turn on "Allow more than one person" for several. Filter "has any of" a person to see someone's work. |
+| **Autonumber** | 1, 2, 3… in the order records were created. Existing records get numbers when you add the field, and numbers are never reused. |
+| **Created time / Last modified time** | Filled in automatically. Last modified changes whenever someone edits the record. |
+| **Created by / Last modified by** | Filled in automatically with the person's name. |
 | **Link to another record** | Connects two tables, and both sides stay in sync. The demo links Projects → Client. |
 | **Lookup** | Shows a field from linked records, such as a project's "Client city". |
 | **Rollup** | Combines values from linked records: SUM, AVERAGE, MIN, MAX, COUNT, join. The demo uses it for "Invoiced" and "Hours logged". |
@@ -148,7 +156,7 @@ Browser (React + Vite)            API (Node + Fastify)                Storage
   - URL fetches are protected against SSRF.
   - Spreadsheet exports are protected against formula injection.
 - **Quality:**
-  - `pnpm test` runs 104 automated tests across API and engine.
+  - `pnpm test` runs 115 automated tests across API and engine.
   - `pnpm typecheck` checks types across the whole project.
   - `pnpm seed:demo` exercises the HTTP API end to end.
 

@@ -20,6 +20,7 @@ import { FieldIcon } from "./fieldIcons";
 import { ChoicePill, Popover, anchorOf, type Anchor } from "./Popover";
 import type { ViewContext } from "./TableWorkspace";
 import { ViewIcon } from "./ViewSidebar";
+import { useCollaborators } from "./PeoplePicker";
 
 type Panel = "hide" | "filter" | "sort" | "height" | "stack" | "more" | "date" | "color" | "cover" | "size";
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
@@ -301,6 +302,7 @@ function FilterEditor({ ctx }: { ctx: ViewContext }) {
 
 function FilterValueInput({ field, cond, onChange }: { field: Field; cond: FilterCondition; onChange: (v: FilterCondition["value"]) => void }) {
   const v = cond.value;
+  if (effectiveType(field) === "user") return <PeopleFilter value={v} onChange={onChange} />;
   if (LIST_OPS.has(cond.operator)) {
     const selected = new Set(Array.isArray(v) ? v : []);
     return (
@@ -351,6 +353,31 @@ function FilterValueInput({ field, cond, onChange }: { field: Field; cond: Filte
       value={v === null || v === undefined ? "" : String(v)}
       onChange={(s) => onChange(s === "" ? null : isNumericField(field) ? Number(s) : s)}
     />
+  );
+}
+
+/** Tick the people to match. */
+function PeopleFilter({ value, onChange }: { value: FilterCondition["value"]; onChange: (v: FilterCondition["value"]) => void }) {
+  const q = useCollaborators();
+  const selected = new Set(Array.isArray(value) ? value : []);
+  return (
+    <div className="choice-checks">
+      {(q.data?.users ?? []).map((u) => (
+        <label key={u.id} className="row">
+          <input
+            type="checkbox"
+            checked={selected.has(u.id)}
+            onChange={(e) => {
+              const next = new Set(selected);
+              if (e.target.checked) next.add(u.id);
+              else next.delete(u.id);
+              onChange([...next]);
+            }}
+          />
+          {u.name}
+        </label>
+      ))}
+    </div>
   );
 }
 

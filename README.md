@@ -10,7 +10,7 @@ Works today:
 - **Emails**: confirm your address at sign-up (banner + "Resend email" until you do), **forgot password** (link valid 1 hour, once; signs out every device; never reveals whether an account exists), and **invite emails**. In development the API doesn't send anything: open **http://localhost:5180/dev/mail** to see every email and click its links. For real email set `MAIL_PROVIDER=resend`, `RESEND_API_KEY` and `MAIL_FROM`, and `APP_URL` to the app's public address.
 - Workspaces → bases → tables → fields → records
 - Create, rename, delete bases and tables (double-click a tab to rename, right-click to delete)
-- Field types: single line text, long text, number (decimal places), checkbox, single select, multiple select, date (optional time), email, URL, phone
+- Field types: single line text, long text, number (decimal places), checkbox, single select, multiple select, date (optional time), email, URL, phone, **currency** (₹/$/€… symbol), **percent**, **rating** (stars), **duration** (h:mm), **user** (assign people who can open the base), **autonumber**, **created time**, **last modified time**, **created by**, **last modified by**
 - Add, edit, delete fields; changing a field's type converts existing values
 - Spreadsheet grid: inline editing, copy/paste, fill handle, frozen primary column, column resize, add/delete records, Delete key clears cells, search
 - Permission checks on every API call (owner / creator / editor / commenter / read)
