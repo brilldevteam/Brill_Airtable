@@ -188,6 +188,7 @@ export function registerShare(app: FastifyInstance, db: Db, files: { saveFile: S
       return recId;
     });
     bus.emit(`base:${view.base_id}`, { scope: "records", baseId: view.base_id, tableId: view.table_id, recordId: id, userId: "public-form" });
+    app.automations.recordChanged({ tableId: view.table_id, recordId: id, kind: "created", fieldIds: Object.keys(cells), formViewId: view.id });
     return { ok: true };
   });
 

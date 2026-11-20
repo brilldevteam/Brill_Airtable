@@ -129,6 +129,12 @@ export async function prepareCells(t: Db, tableId: string, input: Record<string,
   return cells;
 }
 
+/** Cells may be keyed by field id or name; give the ids. */
+async function fieldIdsOf(db: Db, tableId: string, keys: string[]): Promise<string[]> {
+  const fields = await loadFields(db, tableId);
+  return keys.map((k) => fields.find((f) => f.id === k || f.name === k)?.id).filter((x): x is string => !!x);
+}
+
 export async function loadFields(db: Db, tableId: string): Promise<Field[]> {
   return (await db.query(`SELECT * FROM fields WHERE table_id = $1 ORDER BY position, id`, [tableId])).map(toField);
 }
@@ -676,6 +682,7 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
       await computeAllForRecord(t, schema, tableId, id);
       return toRecord(await t.one(`SELECT * FROM records WHERE id=$1`, [id]));
     });
+    app.automations.recordChanged({ tableId, recordId: record.id, kind: "created", fieldIds: await fieldIdsOf(db, tableId, Object.keys(body.cells)) });
     return { record };
   });
 
@@ -691,6 +698,7 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
       await writeCells(t, new Schema(t), user.id, tableId, recordId, patch);
       return toRecord(await t.one(`SELECT * FROM records WHERE id=$1`, [recordId]));
     });
+    app.automations.recordChanged({ tableId, recordId, kind: "updated", fieldIds: await fieldIdsOf(db, tableId, Object.keys(body.cells)) });
     return { record };
   });
 

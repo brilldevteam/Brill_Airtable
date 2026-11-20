@@ -4,3 +4,4 @@ export * from "./api-types";
 export * from "./views";
 export * from "./formula";
 export * from "./summary";
+export * from "./automations";

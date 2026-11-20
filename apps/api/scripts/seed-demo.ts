@@ -368,6 +368,33 @@ async function main() {
   }));
   await addView(invoicesT, "Status board", "kanban", (f) => ({ stackFieldId: f.get("Status")!.id }));
 
+  // ---------- automations (examples; switched off so the demo doesn't send emails) ----------
+  {
+    const P2 = new Map((await fieldsOf(projectsT)).map((f) => [f.name, f]));
+    const T2 = new Map((await fieldsOf(tasksT)).map((f) => [f.name, f]));
+    await call("POST", `/api/bases/${base.id}/automations`, {
+      name: "Project ready for review → email the client",
+      enabled: false,
+      trigger: {
+        type: "recordMatches", tableId: projectsT,
+        conditions: [{ id: "c1", fieldId: P2.get("Status")!.id, operator: "is", value: choiceId(P2.get("Status")!, "Review") }],
+      },
+      actions: [
+        { type: "updateRecord", fields: { [P2.get("Progress")!.id]: "90" } },
+        {
+          type: "sendEmail", to: "client@example.com", subject: "{Name} is ready for your review",
+          body: "Hi,\n{Name} for {Client} is ready for your review.\nOpen it here: {Record URL}\nThanks — Brill Studio",
+        },
+      ],
+    });
+    await call("POST", `/api/bases/${base.id}/automations`, {
+      name: "Task done → log hours on the project",
+      enabled: false,
+      trigger: { type: "recordUpdated", tableId: tasksT, fieldIds: [T2.get("Done")!.id] },
+      actions: [{ type: "webhook", url: "https://hooks.example.com/brill/task-done" }],
+    });
+  }
+
   // ---------- a little activity ----------
   await call("POST", `/api/records/${projectIds[0]}/comments`, { body: "Client loved route B of the logo. Moving to packaging this week." });
   await call("POST", `/api/records/${projectIds[2]}/comments`, { body: "Film edit v1 goes to the client on Friday — colour grade after approval." });

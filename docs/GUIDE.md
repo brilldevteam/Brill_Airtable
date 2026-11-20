@@ -150,6 +150,31 @@ Select an attachment cell and press Enter to open the strip. **Add** offers **Lo
 
 ---
 
+## 11b. Automations
+
+Click **⚡ Automations** in a base's header (creators and owners only). Each automation is **When … then …**:
+
+| When (trigger) | Example |
+|---|---|
+| A record is created | A new lead is added |
+| A record is updated (any field, or only fields you tick) | Someone changes the Reviewer |
+| A record matches conditions | Status becomes "Review". It runs once each time a record *starts* matching, not on every later edit. Records that already matched when you switched it on don't run. |
+| A form is submitted (choose the form) | A client sends the project request form |
+
+| Then (actions, in order) | Notes |
+|---|---|
+| Update the record | Set fields to fixed values or `{Field}` tokens. Select options, linked records, people and dates can be given by name. |
+| Create a record | In any table of the base, for example a log entry or a task. |
+| Send an email | **To** can mix addresses with `{Email}` or people tokens such as `{Assignee}`. Subject and message can use any `{Field}` and `{Record URL}`. |
+| Send a webhook | Sends a POST with the record's fields as JSON to Zapier, Make, n8n, Slack and similar tools. Private and local network addresses are refused. |
+
+- Use the **{ }** button in any text box to insert a field.
+- **Test** runs the actions straight away on the newest record.
+- **Run history** shows every run and the result of each step, for example "Emailed client@…" or "The webhook answered 500".
+- If a step fails, the rest of that run stops.
+- Automations that change records can trigger other automations, up to 3 levels deep, but never themselves, so loops stop on their own.
+- The demo base has two examples, switched off.
+
 ## 12. Behind the scenes
 
 ```
@@ -174,10 +199,10 @@ Browser (React + Vite)            API (Node + Fastify)                Storage
   - URL fetches are protected against SSRF.
   - Spreadsheet exports are protected against formula injection.
 - **Quality:**
-  - `pnpm test` runs 124 automated tests across API and engine.
+  - `pnpm test` runs 129 automated tests across API and engine.
   - `pnpm typecheck` checks types across the whole project.
   - `pnpm seed:demo` exercises the HTTP API end to end.
 
 ## 13. What isn't built yet
 
-Automations, interfaces (dashboards), Google sign-in, two-factor sign-in, record paging for very large tables, and production hosting. [SAAS_PLAN.md](../SAAS_PLAN.md) covers these and the move to a SaaS product.
+Interfaces (dashboards), scheduled automations, Google sign-in, two-factor sign-in, record paging for very large tables, and production hosting. [SAAS_PLAN.md](../SAAS_PLAN.md) covers these and the move to a SaaS product.

@@ -40,9 +40,10 @@ Works today:
 - **Form view**: build a form (title, description, which fields, question labels, help text, required, order, button text, thank-you message) and share it with **Share form** — anyone with the link can answer at `/f/<token>` without an account, including uploading files. Each answer becomes a record. Link fields and calculated fields can't be on a public form. Submissions are rate-limited per visitor.
 - **Shared views**: any other view can be shared read-only (⋯ → Share view) at `/v/<token>` — only that view's visible fields, with its filters; images and files from visible attachment fields load through the link. Creators/owners can make a new link (the old one stops working) or turn it off.
 - **Trash and undo**: deleted records go to the base's **Trash** (⋯ → Trash) for 30 days — restore them with their links, or delete them for good. **Ctrl+Z** undoes your last change in a table (cell edits, pastes and fills as one step, new and deleted records) and **Ctrl+Shift+Z** / **Ctrl+Y** redoes it; a notice after each delete has an Undo button.
+- **Automations** (⚡ Automations on a base): *when* a record is created, updated (any field or chosen fields), starts matching conditions, or a form is submitted — *then* update the record, create a record in any table, send an email, or call a webhook. Text can use `{Field name}` tokens (and `{Record URL}`); people fields in an email's To use their addresses. Runs in the background after the change is saved, with a run history (each step's result) and a **Test** button. Automations can trigger other automations up to 3 levels deep but never themselves. Creators and owners manage them.
 - **Record activity**: the record popup has **Comments** and **History** (who changed which field, from what to what, and when).
 
-Not yet: automations, interfaces (dashboards). Link fields can only be filtered by "is empty / is not empty" for now. These follow the phases in the plan.
+Not yet: interfaces (dashboards), scheduled automations. Link fields can only be filtered by "is empty / is not empty" for now. These follow the phases in the plan.
 
 ## Requirements
 

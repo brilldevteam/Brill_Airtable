@@ -1,4 +1,5 @@
 import type {
+  Action, Automation, AutomationRun, Trigger,
   AttachmentInfo, EditAccess, Base, Field, FieldOptions, FieldType, RecordRow, Table, TableDetail, User, View, ViewConfig, ViewRecords, ViewType,
 } from "@brill/shared";
 
@@ -227,6 +228,14 @@ export const api = {
 
   createRecord: (tableId: string, cells: Record<string, unknown> = {}) =>
     call<{ record: RecordRow }>("POST", `/api/tables/${tableId}/records`, { cells }),
+  automations: (baseId: string) => call<{ automations: Automation[] }>("GET", `/api/bases/${baseId}/automations`),
+  createAutomation: (baseId: string, body: { name: string; trigger: Trigger; actions: Action[]; enabled?: boolean }) =>
+    call<{ automation: Automation }>("POST", `/api/bases/${baseId}/automations`, body),
+  updateAutomation: (id: string, patch: Partial<{ name: string; enabled: boolean; trigger: Trigger; actions: Action[] }>) =>
+    call<{ automation: Automation }>("PATCH", `/api/automations/${id}`, patch),
+  deleteAutomation: (id: string) => call("DELETE", `/api/automations/${id}`),
+  automationRuns: (id: string) => call<{ runs: AutomationRun[] }>("GET", `/api/automations/${id}/runs`),
+  testAutomation: (id: string, recordId?: string) => call<{ run: AutomationRun }>("POST", `/api/automations/${id}/test`, recordId ? { recordId } : {}),
   updateRecord: (id: string, cells: Record<string, unknown>) => call<{ record: RecordRow }>("PATCH", `/api/records/${id}`, { cells }),
   deleteRecord: (id: string) => call("DELETE", `/api/records/${id}`),
   restoreRecord: (id: string) => call<{ record: RecordRow }>("POST", `/api/records/${id}/restore`, {}),

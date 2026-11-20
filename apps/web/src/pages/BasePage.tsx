@@ -1,6 +1,6 @@
 import type { Table } from "@brill/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronDown, ChevronRight, Pencil, Plus, Sheet, Trash2, Users } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Pencil, Plus, Sheet, Trash2, Users, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
@@ -9,6 +9,7 @@ import { AppBar } from "../components/AppBar";
 import { useDialogs } from "../components/Dialogs";
 import { Popover, anchorOf, type Anchor } from "../components/Popover";
 import { ShareDialog } from "../components/ShareDialog";
+import { AutomationsPanel } from "../components/AutomationsPanel";
 import { TableWorkspace } from "../components/TableWorkspace";
 import { useBaseEvents } from "../useBaseEvents";
 
@@ -24,6 +25,7 @@ export function BasePage() {
   const [baseMenu, setBaseMenu] = useState<Anchor | null>(null);
   const [tableMenu, setTableMenu] = useState<{ table: Table; anchor: Anchor } | null>(null);
   const [sharing, setSharing] = useState(false);
+  const [automating, setAutomating] = useState(false);
   const live = useBaseEvents(baseId);
 
   const tables = q.data?.tables ?? [];
@@ -97,9 +99,13 @@ export function BasePage() {
         <span className={"live-dot" + (live ? " on" : "")} title={live ? "Live — changes from your team appear automatically" : "Reconnecting…"}>
           <span /> {live ? "Live" : "Offline"}
         </span>
+        {canDesign && !guest && (
+          <button className="btn sm" onClick={() => setAutomating(true)} title="Automations"><Zap size={14} /> <span className="hide-sm">Automations</span></button>
+        )}
         <button className="btn sm" onClick={() => setSharing(true)}><Users size={14} /> Share</button>
       </AppBar>
       {sharing && <ShareDialog baseId={base.id} onClose={() => setSharing(false)} />}
+      {automating && <AutomationsPanel baseId={base.id} tables={tables} onClose={() => setAutomating(false)} />}
 
       <nav className="table-tabs">
         {tables.map((t) => {

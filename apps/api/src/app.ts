@@ -15,6 +15,7 @@ import { registerRealtime } from "./realtime";
 import { registerRoutes } from "./routes";
 import { registerShare } from "./share";
 import { registerTrash } from "./trash";
+import { AutomationEngine, registerAutomations } from "./automations";
 
 export interface AppOptions {
   secureCookies?: boolean;
@@ -29,6 +30,8 @@ export interface AppOptions {
   appUrl?: string;
   /** Expose the dev outbox at GET /api/dev/mail (never in production). */
   devMail?: boolean;
+  /** Tests only: let automation webhooks call localhost. */
+  allowLoopbackWebhooks?: boolean;
 }
 
 export function buildApp(db: Db, opts: AppOptions) {
@@ -87,6 +90,9 @@ export function buildApp(db: Db, opts: AppOptions) {
     throw new HttpError(415, "Requests must be JSON");
   });
 
+  app.decorate("automations", new AutomationEngine(db, {
+    mailer, appUrl, allowLoopbackWebhooks: opts.allowLoopbackWebhooks, log: (e) => app.log.error(e, "automation failed"),
+  }));
   app.after(() => {
     registerAuth(app, db, { secureCookies: opts.secureCookies ?? false, mailer, appUrl });
     registerRealtime(app, db);
@@ -96,6 +102,7 @@ export function buildApp(db: Db, opts: AppOptions) {
     registerMembers(app, db, { mailer, appUrl });
     registerActivity(app, db);
     registerTrash(app, db);
+    registerAutomations(app, db);
     registerShare(app, db, files);
   });
   if (opts.devMail && mailer.outbox) {

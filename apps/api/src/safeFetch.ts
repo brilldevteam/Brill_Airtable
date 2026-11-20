@@ -39,7 +39,7 @@ export function isBlockedAddress(ip: string): boolean {
 const isLoopback = (ip: string) => /^127\./.test(ip) || ip === "::1";
 
 /** DNS lookup that refuses to hand out blocked addresses. */
-const makeLookup = (allowLoopback: boolean) => (hostname: string, options: any, callback: any) => {
+export const makeLookup = (allowLoopback: boolean) => (hostname: string, options: any, callback: any) => {
   dnsLookup(hostname, { ...options, all: true }, (err, addresses: LookupAddress[]) => {
     if (err) return callback(err);
     const ok = addresses.filter((a) => !isBlockedAddress(a.address) || (allowLoopback && isLoopback(a.address)));

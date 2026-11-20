@@ -76,7 +76,7 @@ export function parseLooseNumber(v: unknown): number | null {
 const TRUE_WORDS = new Set(["true", "yes", "y", "1", "x", "✓", "✔", "checked", "on"]);
 
 /** Turn loose input values into values prepareCells accepts. Mutates field options (new choices) in the db. */
-async function typecastCells(
+export async function typecastCells(
   t: Db, tableId: string, fields: Field[], input: Record<string, unknown>, opts: { dateOrder: DateOrder; userId: string },
 ): Promise<Record<string, unknown>> {
   const byId = new Map(fields.map((f) => [f.id, f]));
@@ -222,6 +222,7 @@ export function registerImportExport(app: FastifyInstance, db: Db) {
       }
       return created;
     });
+    for (const id of ids) app.automations.recordChanged({ tableId, recordId: id, kind: "created", fieldIds: [] });
     return { created: ids.length, ids };
   });
 

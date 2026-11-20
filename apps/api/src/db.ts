@@ -228,6 +228,37 @@ const MIGRATIONS: string[] = [
   /* 011 trash: links to records still in the trash, re-made when those are restored */ `
   ALTER TABLE records ADD COLUMN trash_links JSONB
   `,
+  /* 012 automations: trigger + actions per base, a run log, and which records currently match */ `
+  CREATE TABLE automations (
+    id TEXT PRIMARY KEY,
+    base_id TEXT NOT NULL REFERENCES bases(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT false,
+    trigger JSONB NOT NULL,
+    actions JSONB NOT NULL DEFAULT '[]',
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+  CREATE INDEX automations_base_idx ON automations (base_id);
+  CREATE INDEX automations_table_idx ON automations ((trigger->>'tableId')) WHERE enabled;
+  CREATE TABLE automation_runs (
+    id TEXT PRIMARY KEY,
+    automation_id TEXT NOT NULL REFERENCES automations(id) ON DELETE CASCADE,
+    record_id TEXT,
+    record_name TEXT,
+    status TEXT NOT NULL CHECK (status IN ('success','failed')),
+    steps JSONB NOT NULL DEFAULT '[]',
+    test BOOLEAN NOT NULL DEFAULT false,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+  CREATE INDEX automation_runs_idx ON automation_runs (automation_id, started_at DESC);
+  CREATE TABLE automation_matches (
+    automation_id TEXT NOT NULL REFERENCES automations(id) ON DELETE CASCADE,
+    record_id TEXT NOT NULL,
+    PRIMARY KEY (automation_id, record_id)
+  )
+  `,
 ];
 
 async function migrate(db: Db) {

@@ -65,7 +65,7 @@ export function mailerFromEnv(env: NodeJS.ProcessEnv): Mailer {
 // ---------------- templates ----------------
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
-function layout(heading: string, paragraphs: string[], button: { label: string; url: string }, footer: string): Pick<Email, "text" | "html"> {
+export function layout(heading: string, paragraphs: string[], button: { label: string; url: string }, footer: string): Pick<Email, "text" | "html"> {
   const text = [heading, "", ...paragraphs, "", `${button.label}: ${button.url}`, "", footer].join("\n");
   const html = `<!doctype html><html><body style="margin:0;background:#f4f4f6;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#18181b">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:32px 12px"><tr><td align="center">
