@@ -17,6 +17,7 @@ import { registerShare } from "./share";
 import { registerTrash } from "./trash";
 import { AutomationEngine, registerAutomations } from "./automations";
 import { registerDashboards } from "./dashboards";
+import { registerWebApp } from "./webApp";
 
 export interface AppOptions {
   secureCookies?: boolean;
@@ -33,6 +34,10 @@ export interface AppOptions {
   devMail?: boolean;
   /** Tests only: let automation webhooks call localhost. */
   allowLoopbackWebhooks?: boolean;
+  /** Production: serve the built web app (apps/web/dist) from this folder. */
+  webDir?: string;
+  /** "open" (anyone can sign up) or "invite" (only the first account and people with an invite). */
+  signups?: "open" | "invite";
 }
 
 export function buildApp(db: Db, opts: AppOptions) {
@@ -50,7 +55,10 @@ export function buildApp(db: Db, opts: AppOptions) {
   app.addHook("onSend", async (req, reply) => {
     reply.header("x-content-type-options", "nosniff");
     reply.header("referrer-policy", "strict-origin-when-cross-origin");
-    reply.header("x-frame-options", "DENY");
+    // Attachments may be previewed (PDFs) inside the app's own pages; nothing else may be framed.
+    const file = req.url.includes("/attachments/") || req.url.includes("/files/");
+    reply.header("x-frame-options", file ? "SAMEORIGIN" : "DENY");
+    reply.header("permissions-policy", "camera=(self), microphone=(), geolocation=(), payment=()");
     reply.header("cross-origin-opener-policy", "same-origin");
     reply.header("x-request-id", req.id);
     if (!reply.hasHeader("content-security-policy")) reply.header("content-security-policy", "default-src 'none'; frame-ancestors 'none'");
@@ -95,7 +103,7 @@ export function buildApp(db: Db, opts: AppOptions) {
     mailer, appUrl, allowLoopbackWebhooks: opts.allowLoopbackWebhooks, log: (e) => app.log.error(e, "automation failed"),
   }));
   app.after(() => {
-    registerAuth(app, db, { secureCookies: opts.secureCookies ?? false, mailer, appUrl });
+    registerAuth(app, db, { secureCookies: opts.secureCookies ?? false, mailer, appUrl, signups: opts.signups ?? "open" });
     registerRealtime(app, db);
     registerRoutes(app, db);
     const files = registerFiles(app, db, opts.filesDir);
@@ -119,5 +127,6 @@ export function buildApp(db: Db, opts: AppOptions) {
       return reply.status(503).send({ ok: false, error: "database unavailable" });
     }
   });
+  if (opts.webDir) registerWebApp(app, opts.webDir);
   return app;
 }

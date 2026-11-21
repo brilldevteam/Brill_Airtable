@@ -78,6 +78,14 @@ pnpm seed:demo
 
 Production settings (environment variables for the API): `PORT`, `HOST` (default 127.0.0.1), `DATA_DIR`, `FILES_DIR`, `NODE_ENV=production` (secure cookies + HSTS), `SECURE_COOKIES`, `TRUST_PROXY` (behind nginx/Caddy/a load balancer), `APP_URL` (used in email links), `MAIL_PROVIDER` / `RESEND_API_KEY` / `MAIL_FROM`. `GET /api/health` checks the database.
 
+## Production
+
+```bash
+pnpm build
+```
+
+Builds the web app and a single API file; `node apps/api/dist/server.mjs` (or PM2 with `ecosystem.config.cjs`) then serves both on one port. Settings: `.env.production.example`. Step-by-step VPS guide (CloudPanel + PM2): [docs/DEPLOY.md](docs/DEPLOY.md). Nightly database backups, invite-only sign-ups (`SIGNUPS=invite`).
+
 ## Tests
 
 ```bash

@@ -12,6 +12,8 @@ export interface Db {
   one<T = any>(sql: string, params?: unknown[]): Promise<T | undefined>;
   tx<T>(fn: (db: Db) => Promise<T>): Promise<T>;
   close(): Promise<void>;
+  /** A compressed snapshot of the whole database (PGlite only). */
+  backup?(): Promise<Uint8Array>;
 }
 
 type Queryable = { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> };
@@ -41,6 +43,7 @@ export async function openDb(dataDir: string): Promise<Db> {
       return fn(inner);
     });
   const db: Db = wrap(pg as unknown as Queryable, tx, close);
+  db.backup = async () => new Uint8Array(await (await pg.dumpDataDir("gzip")).arrayBuffer());
   await migrate(db);
   return db;
 }

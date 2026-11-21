@@ -7,9 +7,10 @@
     "dev": "pnpm -r --parallel --filter ./apps/** dev",
     "dev:api": "pnpm --filter @brill/api dev",
     "dev:web": "pnpm --filter @brill/web dev",
-    "build": "pnpm -r build",
+    "build": "pnpm --filter @brill/web build && pnpm --filter @brill/api build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "seed:demo": "pnpm --filter @brill/api seed:demo"
+    "seed:demo": "pnpm --filter @brill/api seed:demo",
+    "start": "node --env-file=.env.production apps/api/dist/server.mjs"
   }
 }

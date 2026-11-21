@@ -5,10 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "start": "tsx src/server.ts",
+    "start": "node dist/server.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "seed:demo": "tsx scripts/seed-demo.ts"
+    "seed:demo": "tsx scripts/seed-demo.ts",
+    "build": "node scripts/build.mjs",
+    "restore-backup": "tsx scripts/restore-backup.ts"
   },
   "dependencies": {
     "@brill/shared": "workspace:*",
@@ -24,6 +26,7 @@
     "@types/node": "22.10.2",
     "tsx": "4.19.2",
     "typescript": "5.6.3",
-    "vitest": "2.1.8"
+    "vitest": "2.1.8",
+    "esbuild": "0.23.1"
   }
 }

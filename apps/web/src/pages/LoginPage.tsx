@@ -41,6 +41,8 @@ export function LoginPage() {
   const qc = useQueryClient();
   const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
   const [sent, setSent] = useState(false);
+  const [inviteOnly, setInviteOnly] = useState(false);
+  useEffect(() => { api.authConfig().then((c) => setInviteOnly(c.signups === "invite"), () => undefined); }, []);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -148,12 +150,13 @@ export function LoginPage() {
             {busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
             {!busy && <ArrowRight size={16} />}
           </button>
-          <div className="auth-switch">
+          {!(inviteOnly && mode === "login" && !invite) && <div className="auth-switch">
             {mode === "login" ? "New to Brill Tables? " : "Already have an account? "}
             <button type="button" className="link" onClick={() => switchTo(mode === "login" ? "register" : "login")}>
               {mode === "login" ? "Create an account" : "Sign in"}
             </button>
-          </div>
+          </div>}
+          {inviteOnly && mode === "login" && !invite && <div className="auth-switch">New here? Ask your team for an invite.</div>}
         </form>
     </AuthLayout>
   );

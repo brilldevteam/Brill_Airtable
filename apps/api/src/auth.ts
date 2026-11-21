@@ -47,7 +47,7 @@ const VERIFY_HOURS = 24;
 const RESET_MINUTES = 60;
 export const hashToken = (t: string) => createHash("sha256").update(t).digest("base64url");
 
-export function registerAuth(app: FastifyInstance, db: Db, opts: { secureCookies: boolean; mailer: Mailer; appUrl: string }) {
+export function registerAuth(app: FastifyInstance, db: Db, opts: { secureCookies: boolean; mailer: Mailer; appUrl: string; signups?: "open" | "invite" }) {
   // Brute-force protection: per address and per account.
   const loginByIp = limiter(30, 15 * 60_000);
   const loginByEmail = limiter(10, 15 * 60_000, "Too many sign-in attempts for this account — wait 15 minutes and try again");
@@ -122,6 +122,14 @@ export function registerAuth(app: FastifyInstance, db: Db, opts: { secureCookies
   app.post("/api/auth/register", async (req, reply) => {
     registerByIp(req.ip);
     const body = registerBody.parse(req.body);
+    if (opts.signups === "invite") {
+      // Invite-only: the very first account (the owner) may sign up; after that only invited emails.
+      const anyone = await db.one(`SELECT 1 FROM users LIMIT 1`);
+      const invited = await db.one(
+        `SELECT 1 FROM workspace_invites WHERE email=$1 AND accepted_at IS NULL AND expires_at > now()`, [body.email],
+      );
+      if (anyone && !invited) throw new HttpError(403, "Sign-up is by invitation only. Ask a workspace owner to invite you.");
+    }
     const exists = await db.one(`SELECT 1 FROM users WHERE email = $1`, [body.email]);
     if (exists) throw new HttpError(409, "An account with this email already exists — sign in instead");
     const user: User = { id: newId("usr"), email: body.email, name: body.name };
@@ -163,6 +171,8 @@ export function registerAuth(app: FastifyInstance, db: Db, opts: { secureCookies
   });
 
   app.get("/api/auth/me", async (req) => ({ user: req.user ?? null }));
+  /** Lets the sign-in page hide "Create an account" when sign-ups are invite-only. */
+  app.get("/api/auth/config", async () => ({ signups: opts.signups ?? "open" }));
 
   // ---------------- email verification ----------------
   app.post("/api/auth/verify-email", async (req) => {

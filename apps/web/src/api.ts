@@ -96,6 +96,7 @@ export const api = {
   register: (name: string, email: string, password: string) =>
     call<{ user: User }>("POST", "/api/auth/register", { name, email, password }),
   logout: () => call("POST", "/api/auth/logout", {}),
+  authConfig: () => call<{ signups: "open" | "invite" }>("GET", "/api/auth/config"),
   updateMe: (name: string) => call<{ user: User }>("PATCH", "/api/auth/me", { name }),
   changePassword: (currentPassword: string, newPassword: string) => call("POST", "/api/auth/password", { currentPassword, newPassword }),
   sessions: () => call<{ active: number }>("GET", "/api/auth/sessions"),
