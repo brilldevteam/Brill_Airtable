@@ -98,6 +98,9 @@ export const api = {
   logout: () => call("POST", "/api/auth/logout", {}),
   authConfig: () => call<{ signups: "open" | "invite"; firstAccount: boolean }>("GET", "/api/auth/config"),
   updateMe: (name: string) => call<{ user: User }>("PATCH", "/api/auth/me", { name }),
+  changeEmail: (newEmail: string, currentPassword: string) =>
+    call<{ ok: true; pending: string }>("POST", "/api/auth/email", { newEmail, currentPassword }),
+  confirmEmail: (token: string) => call<{ ok: true; email: string }>("POST", "/api/auth/confirm-email", { token }),
   changePassword: (currentPassword: string, newPassword: string) => call("POST", "/api/auth/password", { currentPassword, newPassword }),
   sessions: () => call<{ active: number }>("GET", "/api/auth/sessions"),
   revokeOtherSessions: () => call("POST", "/api/auth/sessions/revoke-others", {}),

@@ -13,12 +13,13 @@ export function App() {
   const { pathname } = useLocation();
   // Shared forms and views are public: no sign-in, no account lookup.
   // So are the emailed account links and the dev mailbox.
-  if (/^\/(f|v|verify-email|reset-password|dev)\//.test(pathname)) {
+  if (/^\/(f|v|verify-email|confirm-email|reset-password|dev)\//.test(pathname)) {
     return (
       <Routes>
         <Route path="/f/:token" element={<PublicFormPage />} />
         <Route path="/v/:token" element={<PublicViewPage />} />
         <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
+        <Route path="/confirm-email/:token" element={<VerifyEmailPage change />} />
         <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
         <Route path="/dev/mail" element={<DevMailPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

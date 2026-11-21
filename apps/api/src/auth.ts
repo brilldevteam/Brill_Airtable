@@ -248,6 +248,65 @@ export function registerAuth(app: FastifyInstance, db: Db, opts: { secureCookies
     return { user: { ...user, name: body.name } };
   });
 
+  /**
+   * Change the account's email. Needs the current password. Nothing changes until the link sent to
+   * the NEW address is opened; the old address gets a notice.
+   */
+  app.post("/api/auth/email", async (req) => {
+    const user = requireUser(req);
+    const body = z.object({
+      newEmail: z.string().trim().toLowerCase().email().max(254),
+      currentPassword: z.string().max(200),
+    }).parse(req.body);
+    loginByEmail(user.email);
+    mailByIp(req.ip);
+    if (body.newEmail === user.email.toLowerCase()) throw new HttpError(400, "That's already your email");
+    const row = await db.one<{ password_hash: string }>(`SELECT password_hash FROM users WHERE id=$1`, [user.id]);
+    if (!row || !(await verify(row.password_hash, body.currentPassword))) throw new HttpError(400, "Your current password is wrong");
+    loginByEmail.reset(user.email);
+    if (await db.one(`SELECT 1 FROM users WHERE email=$1`, [body.newEmail])) {
+      throw new HttpError(409, "Another account already uses that email");
+    }
+    mailByEmail(body.newEmail);
+    const token = randomBytes(32).toString("base64url");
+    await db.query(`DELETE FROM email_tokens WHERE user_id=$1 AND kind='email' AND used_at IS NULL`, [user.id]);
+    await db.query(
+      `INSERT INTO email_tokens (token_hash, user_id, kind, expires_at, new_email) VALUES ($1,$2,'email',$3,$4)`,
+      [hashToken(token), user.id, new Date(Date.now() + VERIFY_HOURS * 3600_000), body.newEmail],
+    );
+    try {
+      await opts.mailer.send(emails.changeEmail(body.newEmail, user.name, `${opts.appUrl}/confirm-email/${token}`));
+    } catch (e) {
+      req.log.error(e, "email-change email failed");
+      throw new HttpError(502, "We couldn't send the email. The email settings on the server need checking — try again later.");
+    }
+    await trySend(req, opts.mailer.send(emails.emailChangeNotice(user.email, user.name, body.newEmail, opts.appUrl)).then(() => undefined));
+    return { ok: true, pending: body.newEmail };
+  });
+
+  /** Open the link from the new address: the account switches to it (and it counts as confirmed). */
+  app.post("/api/auth/confirm-email", async (req) => {
+    const { token } = z.object({ token: z.string().min(10).max(200) }).parse(req.body);
+    const email = await db.tx(async (t) => {
+      const row = await t.one<{ user_id: string; expires_at: string; used_at: string | null; new_email: string }>(
+        `SELECT user_id, expires_at, used_at, new_email FROM email_tokens WHERE token_hash=$1 AND kind='email' FOR UPDATE`,
+        [hashToken(token)],
+      );
+      if (!row) throw new HttpError(400, "This link isn't valid. Ask for a new one in Account settings.");
+      if (row.used_at) throw new HttpError(410, "This link has already been used.");
+      if (new Date(row.expires_at) < new Date()) throw new HttpError(410, "This link has expired. Ask for a new one in Account settings.");
+      if (await t.one(`SELECT 1 FROM users WHERE email=$1 AND id<>$2`, [row.new_email, row.user_id])) {
+        throw new HttpError(409, "Another account started using that email in the meantime.");
+      }
+      await t.query(`UPDATE email_tokens SET used_at=now() WHERE token_hash=$1`, [hashToken(token)]);
+      await t.query(`UPDATE users SET email=$2, email_verified_at=now() WHERE id=$1`, [row.user_id, row.new_email]);
+      // Older confirmation links for the previous address no longer apply.
+      await t.query(`DELETE FROM email_tokens WHERE user_id=$1 AND kind='verify' AND used_at IS NULL`, [row.user_id]);
+      return row.new_email;
+    });
+    return { ok: true, email };
+  });
+
   /** Change password. Signs out every other device. */
   app.post("/api/auth/password", async (req) => {
     const user = requireUser(req);

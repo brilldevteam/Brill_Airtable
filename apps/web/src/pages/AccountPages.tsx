@@ -7,7 +7,7 @@ import { LogoMark } from "../components/AppBar";
 import { AuthLayout } from "./LoginPage";
 
 /** /verify-email/:token — confirms the address from the emailed link (signed in or not). */
-export function VerifyEmailPage() {
+export function VerifyEmailPage({ change = false }: { change?: boolean }) {
   const { token } = useParams();
   const qc = useQueryClient();
   const [state, setState] = useState<{ ok: boolean; text: string } | null>(null);
@@ -15,11 +15,14 @@ export function VerifyEmailPage() {
   useEffect(() => {
     if (started.current) return; // the link works once — don't spend it twice in StrictMode
     started.current = true;
-    api.verifyEmail(token!).then(
-      (r) => { setState({ ok: true, text: `${r.email} is confirmed. You're all set.` }); void qc.invalidateQueries({ queryKey: ["me"] }); },
+    (change ? api.confirmEmail(token!) : api.verifyEmail(token!)).then(
+      (r) => {
+        setState({ ok: true, text: change ? `Your account now uses ${r.email}. Sign in with it from now on.` : `${r.email} is confirmed. You're all set.` });
+        void qc.invalidateQueries({ queryKey: ["me"] });
+      },
       (e) => setState({ ok: false, text: (e as Error).message }),
     );
-  }, [token, qc]);
+  }, [token, qc, change]);
 
   return (
     <AuthLayout>
@@ -28,7 +31,7 @@ export function VerifyEmailPage() {
         {!state ? <div className="spinner" /> : (
           <>
             <div className={"auth-status " + (state.ok ? "ok" : "bad")}>{state.ok ? <CheckCircle2 size={26} /> : <XCircle size={26} />}</div>
-            <h1>{state.ok ? "Email confirmed" : "Link not valid"}</h1>
+            <h1>{state.ok ? (change ? "Email changed" : "Email confirmed") : "Link not valid"}</h1>
             <p className="sub">{state.text}{!state.ok && " Sign in and use “Resend email” on the home page to get a new link."}</p>
             <Link className="btn primary lg block" to="/">Continue to Brill Tables <ArrowRight size={16} /></Link>
           </>

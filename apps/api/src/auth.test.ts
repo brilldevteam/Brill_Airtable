@@ -134,4 +134,28 @@ describe("auth hardening", () => {
     for (let i = 0; i < 4; i++) codes.push((await app.inject({ method: "POST", url: "/api/auth/forgot-password", payload: { email: "spam@brill.test" } })).statusCode);
     expect(codes).toEqual([200, 200, 200, 429]);
   });
+
+  it("changes the account email only after the new address is confirmed", async () => {
+    const s = sid(await register("typo@brlil.test"));
+    await register("taken@brill.test");
+    const change = (newEmail: string, currentPassword = "test-pass-2026") =>
+      app.inject({ method: "POST", url: "/api/auth/email", cookies: { brill_sid: s }, payload: { newEmail, currentPassword } });
+    expect((await change("right@brill.test", "wrong-pass")).statusCode).toBe(400);
+    expect((await change("taken@brill.test")).statusCode).toBe(409);
+    const ok = await change("Right@Brill.test");
+    expect(ok.json()).toEqual({ ok: true, pending: "right@brill.test" });
+    // The old address gets a notice; nothing has changed yet.
+    expect(mailer.outbox!.some((m) => m.to === "typo@brlil.test" && m.subject.includes("being changed"))).toBe(true);
+    const me = () => app.inject({ method: "GET", url: "/api/auth/me", cookies: { brill_sid: s } });
+    expect((await me()).json().user.email).toBe("typo@brlil.test");
+
+    const token = tokenIn("right@brill.test", "https://app.example/confirm-email/")!;
+    const confirm = await app.inject({ method: "POST", url: "/api/auth/confirm-email", payload: { token } });
+    expect(confirm.json()).toEqual({ ok: true, email: "right@brill.test" });
+    expect((await me()).json().user).toMatchObject({ email: "right@brill.test", emailVerified: true });
+    expect((await app.inject({ method: "POST", url: "/api/auth/confirm-email", payload: { token } })).statusCode).toBe(410);
+    // Signing in works with the new email, not the old one.
+    expect((await login("right@brill.test", "test-pass-2026")).statusCode).toBe(200);
+    expect((await login("typo@brlil.test", "test-pass-2026")).statusCode).toBe(401);
+  });
 });

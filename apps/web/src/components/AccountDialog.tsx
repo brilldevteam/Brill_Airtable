@@ -1,6 +1,6 @@
 import type { User } from "@brill/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, MonitorSmartphone, UserRound } from "lucide-react";
+import { AtSign, KeyRound, MonitorSmartphone, UserRound } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../api";
 import { initials } from "./AppBar";
@@ -43,6 +43,17 @@ export function AccountDialog({ user, onClose }: { user: User; onClose: () => vo
       return "Name saved.";
     });
   };
+  const [newEmail, setNewEmail] = useState("");
+  const [emailPassword, setEmailPassword] = useState("");
+  const saveEmail = (e: FormEvent) => {
+    e.preventDefault();
+    run("email", async () => {
+      const r = await api.changeEmail(newEmail.trim(), emailPassword);
+      setNewEmail("");
+      setEmailPassword("");
+      return `Almost done — we sent a link to ${r.pending}. Open it to switch your account to that email.`;
+    });
+  };
   const savePassword = (e: FormEvent) => {
     e.preventDefault();
     run("password", async () => {
@@ -75,6 +86,19 @@ export function AccountDialog({ user, onClose }: { user: User; onClose: () => vo
             <button className="btn" disabled={busy === "name" || !name.trim() || name.trim() === user.name}>Save</button>
           </div>
           {note("name")}
+        </form>
+
+        <form className="acct-section" onSubmit={saveEmail}>
+          <div className="acct-title"><AtSign size={15} /> Email</div>
+          <p className="modal-sub" style={{ margin: 0 }}>
+            Now: <b>{user.email}</b>{user.emailVerified === false && " (not confirmed yet)"}. The change happens once you open the link we send to the new address.
+          </p>
+          <label className="field-label" htmlFor="acct-email">New email</label>
+          <input id="acct-email" type="email" autoComplete="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="you@company.com" />
+          <label className="field-label" htmlFor="acct-email-pass">Current password</label>
+          <input id="acct-email-pass" type="password" autoComplete="current-password" value={emailPassword} onChange={(e) => setEmailPassword(e.target.value)} />
+          <div><button className="btn" disabled={busy === "email" || !newEmail.trim() || !emailPassword}>{busy === "email" ? "Sending…" : "Send confirmation link"}</button></div>
+          {note("email")}
         </form>
 
         <form className="acct-section" onSubmit={savePassword}>

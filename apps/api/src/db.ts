@@ -275,6 +275,11 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX dashboards_base_idx ON dashboards (base_id, position)
   `,
+  /* 014 changing an account's email: the new address is confirmed by a link sent to it */ `
+  ALTER TABLE email_tokens DROP CONSTRAINT IF EXISTS email_tokens_kind_check;
+  ALTER TABLE email_tokens ADD CONSTRAINT email_tokens_kind_check CHECK (kind IN ('verify','reset','email'));
+  ALTER TABLE email_tokens ADD COLUMN new_email TEXT
+  `,
 ];
 
 async function migrate(db: Db) {

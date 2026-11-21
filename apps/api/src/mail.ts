@@ -82,6 +82,18 @@ ${paragraphs.map((p) => `<p style="font-size:15px;line-height:1.55;color:#3f3f46
 }
 
 export const emails = {
+  changeEmail: (to: string, name: string, url: string): Email => ({
+    to,
+    subject: "Confirm your new email for Brill Tables",
+    ...layout(`Confirm your new email`, [`Hi ${name}, please confirm that ${to} is the new email address for your Brill Tables account.`],
+      { label: "Confirm new email", url }, "This link expires in 24 hours. Until you confirm, your account keeps its old email. If you didn't ask for this, ignore this email."),
+  }),
+  emailChangeNotice: (to: string, name: string, newEmail: string, appUrl = ""): Email => ({
+    to,
+    subject: "Your Brill Tables email is being changed",
+    ...layout(`Email change requested`, [`Hi ${name}, someone signed in to your account asked to change its email to ${newEmail}. It only changes once that address is confirmed.`, "If this wasn't you, change your password now and sign out of other devices in Account settings."],
+      { label: "Open Brill Tables", url: appUrl || "https://" }, "You're getting this because it's the current email on the account."),
+  }),
   verify: (to: string, name: string, url: string): Email => ({
     to,
     subject: "Confirm your email for Brill Tables",
