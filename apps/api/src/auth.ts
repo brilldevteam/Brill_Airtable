@@ -172,7 +172,11 @@ export function registerAuth(app: FastifyInstance, db: Db, opts: { secureCookies
 
   app.get("/api/auth/me", async (req) => ({ user: req.user ?? null }));
   /** Lets the sign-in page hide "Create an account" when sign-ups are invite-only. */
-  app.get("/api/auth/config", async () => ({ signups: opts.signups ?? "open" }));
+  app.get("/api/auth/config", async () => {
+    // Invite-only still lets the very first account (the owner) sign up.
+    const first = !(await db.one(`SELECT 1 FROM users LIMIT 1`));
+    return { signups: opts.signups ?? "open", firstAccount: first };
+  });
 
   // ---------------- email verification ----------------
   app.post("/api/auth/verify-email", async (req) => {

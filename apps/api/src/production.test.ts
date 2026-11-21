@@ -43,11 +43,12 @@ describe("production server", () => {
   });
 
   it("invite-only sign-up: the first account, then only invited emails", async () => {
-    expect((await app.inject({ url: "/api/auth/config" })).json()).toEqual({ signups: "invite" });
+    expect((await app.inject({ url: "/api/auth/config" })).json()).toEqual({ signups: "invite", firstAccount: true });
     const reg = (email: string) => app.inject({ method: "POST", url: "/api/auth/register", payload: { email, name: "N", password: "test-pass-2026" } });
     const first = await reg("owner@x.test");
     expect(first.statusCode).toBe(200);
     expect((await reg("stranger@x.test")).statusCode).toBe(403);
+    expect((await app.inject({ url: "/api/auth/config" })).json().firstAccount).toBe(false);
     const sid = first.cookies.find((c) => c.name === "brill_sid")!.value;
     const ws = (await app.inject({ url: "/api/workspaces", cookies: { brill_sid: sid } })).json().workspaces[0].id;
     await app.inject({ method: "POST", url: `/api/workspaces/${ws}/invites`, cookies: { brill_sid: sid }, payload: { email: "friend@x.test", role: "editor" } });

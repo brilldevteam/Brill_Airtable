@@ -42,7 +42,7 @@ export function LoginPage() {
   const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
   const [sent, setSent] = useState(false);
   const [inviteOnly, setInviteOnly] = useState(false);
-  useEffect(() => { api.authConfig().then((c) => setInviteOnly(c.signups === "invite"), () => undefined); }, []);
+  useEffect(() => { api.authConfig().then((c) => setInviteOnly(c.signups === "invite" && !c.firstAccount), () => undefined); }, []);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
