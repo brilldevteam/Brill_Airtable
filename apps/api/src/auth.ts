@@ -196,7 +196,13 @@ export function registerAuth(app: FastifyInstance, db: Db, opts: { secureCookies
     if (user.emailVerified) return { ok: true, alreadyVerified: true };
     mailByIp(req.ip);
     mailByEmail(user.email);
-    await sendVerification(user);
+    try {
+      await sendVerification(user);
+    } catch (e) {
+      // Tell the person something useful; the full reason (e.g. Resend's answer) goes to the server log.
+      req.log.error(e, "verification email failed");
+      throw new HttpError(502, "We couldn't send the email. The email settings on the server need checking — try again later.");
+    }
     return { ok: true };
   });
 

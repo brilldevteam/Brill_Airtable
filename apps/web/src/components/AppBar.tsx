@@ -55,9 +55,14 @@ export function AppBar({ children }: { children?: ReactNode }) {
             <button
               onClick={async () => {
                 setMenu(null);
-                await api.logout();
-                qc.clear();
-                await qc.invalidateQueries({ queryKey: ["me"] });
+                try {
+                  await api.logout();
+                } finally {
+                  // A fresh page load: clears every cached record, closes live-update streams,
+                  // and shows the sign-in page.
+                  qc.clear();
+                  window.location.assign("/");
+                }
               }}
             >
               <LogOut size={16} /> Sign out

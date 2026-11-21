@@ -55,6 +55,7 @@ export function mailerFromEnv(env: NodeJS.ProcessEnv): Mailer {
   const provider = env.MAIL_PROVIDER ?? (env.RESEND_API_KEY ? "resend" : "log");
   if (provider === "resend") {
     if (!env.RESEND_API_KEY || !env.MAIL_FROM) throw new Error("MAIL_PROVIDER=resend needs RESEND_API_KEY and MAIL_FROM");
+    console.log(`Email: sending through Resend as ${env.MAIL_FROM}`);
     return resendMailer(env.RESEND_API_KEY, env.MAIL_FROM);
   }
   if (provider !== "log") throw new Error(`Unknown MAIL_PROVIDER "${provider}"`);
