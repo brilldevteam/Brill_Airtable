@@ -43,7 +43,7 @@ describe("production server", () => {
   });
 
   it("invite-only sign-up: the first account, then only invited emails", async () => {
-    expect((await app.inject({ url: "/api/auth/config" })).json()).toEqual({ signups: "invite", firstAccount: true });
+    expect((await app.inject({ url: "/api/auth/config" })).json()).toEqual({ signups: "invite", firstAccount: true, emailSending: false });
     const reg = (email: string) => app.inject({ method: "POST", url: "/api/auth/register", payload: { email, name: "N", password: "test-pass-2026" } });
     const first = await reg("owner@x.test");
     expect(first.statusCode).toBe(200);

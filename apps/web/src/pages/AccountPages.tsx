@@ -131,7 +131,24 @@ export function DevMailPage() {
 }
 
 /** Home-page banner until the user confirms their email address. */
+/** Is the server really sending emails? (false = they only go to the server's log). */
+export function useEmailSending() {
+  const q = useQuery({ queryKey: ["authConfig"], queryFn: api.authConfig, staleTime: 5 * 60_000 });
+  return q.data ? q.data.emailSending : true;
+}
+
+/** Shown where we'd say "we sent you an email" while the server can't send any. */
+export function EmailOffNote() {
+  return (
+    <div className="email-off">
+      <b>Email isn't set up on this server yet</b>, so nothing is actually sent. The server's administrator can find the link in the
+      server log (<code>pm2 logs brill-tables</code>), or set up sending — see docs/DEPLOY.md, “Real emails”.
+    </div>
+  );
+}
+
 export function VerifyBanner({ email }: { email: string }) {
+  const sending = useEmailSending();
   const [state, setState] = useState<"idle" | "sending" | "sent" | string>("idle");
   const resend = async () => {
     setState("sending");
@@ -143,6 +160,7 @@ export function VerifyBanner({ email }: { email: string }) {
       <span>
         Confirm your email — we sent a link to <b>{email}</b>. You need it to join teams that invite you.
         {state !== "idle" && state !== "sending" && state !== "sent" && <span className="error"> {state}</span>}
+        {!sending && <EmailOffNote />}
       </span>
       <button className="btn sm" onClick={resend} disabled={state === "sending" || state === "sent"}>
         {state === "sent" ? "Sent ✓" : state === "sending" ? "Sending…" : "Resend email"}

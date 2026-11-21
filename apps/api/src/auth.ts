@@ -175,7 +175,8 @@ export function registerAuth(app: FastifyInstance, db: Db, opts: { secureCookies
   app.get("/api/auth/config", async () => {
     // Invite-only still lets the very first account (the owner) sign up.
     const first = !(await db.one(`SELECT 1 FROM users LIMIT 1`));
-    return { signups: opts.signups ?? "open", firstAccount: first };
+    // emailSending: false when the server only writes emails to its log (MAIL_PROVIDER=log).
+    return { signups: opts.signups ?? "open", firstAccount: first, emailSending: !opts.mailer.outbox };
   });
 
   // ---------------- email verification ----------------

@@ -4,6 +4,7 @@ import { AtSign, KeyRound, MonitorSmartphone, UserRound } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../api";
 import { initials } from "./AppBar";
+import { EmailOffNote, useEmailSending } from "../pages/AccountPages";
 
 /** Account settings: name, password, and signing out of other devices. */
 export function AccountDialog({ user, onClose }: { user: User; onClose: () => void }) {
@@ -43,6 +44,7 @@ export function AccountDialog({ user, onClose }: { user: User; onClose: () => vo
       return "Name saved.";
     });
   };
+  const emailSending = useEmailSending();
   const [newEmail, setNewEmail] = useState("");
   const [emailPassword, setEmailPassword] = useState("");
   const saveEmail = (e: FormEvent) => {
@@ -99,6 +101,7 @@ export function AccountDialog({ user, onClose }: { user: User; onClose: () => vo
           <input id="acct-email-pass" type="password" autoComplete="current-password" value={emailPassword} onChange={(e) => setEmailPassword(e.target.value)} />
           <div><button className="btn" disabled={busy === "email" || !newEmail.trim() || !emailPassword}>{busy === "email" ? "Sending…" : "Send confirmation link"}</button></div>
           {note("email")}
+          {!emailSending && msg?.part === "email" && msg.kind === "ok" && <EmailOffNote />}
         </form>
 
         <form className="acct-section" onSubmit={savePassword}>

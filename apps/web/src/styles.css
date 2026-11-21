@@ -1005,7 +1005,7 @@ a.btn { text-decoration: none; }
 .pv-page > .pf-brand { justify-content: center; padding: 10px; border-top: 1px solid var(--border); }
 
 /* ---------- account settings ---------- */
-.acct-modal { max-width: 460px; }
+.acct-modal { max-width: 580px; }
 .acct-avatar { width: 38px; height: 38px; font-size: 14px; cursor: default; flex-shrink: 0; }
 .acct-section { display: flex; flex-direction: column; gap: 6px; padding-top: 14px; border-top: 1px solid var(--border); }
 .acct-title { display: flex; align-items: center; gap: 7px; font-weight: 600; font-size: 13.5px; margin-bottom: 2px; }
@@ -1298,3 +1298,7 @@ a.btn { text-decoration: none; }
 /* Switch focus: no black browser outline after a click; a soft ring for keyboard users. */
 .mode-switch a:focus { outline: none; }
 .mode-switch a:focus-visible { box-shadow: 0 0 0 3px var(--accent-ring); }
+
+.email-off { margin-top: 6px; padding: 8px 10px; border-radius: var(--r-md); background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; font-size: 12.5px; line-height: 1.5; }
+.email-off code { font-size: 12px; background: rgba(154, 52, 18, .08); padding: 0 4px; border-radius: 4px; }
+.verify-banner .email-off { display: block; }
