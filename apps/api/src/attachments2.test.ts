@@ -65,6 +65,9 @@ describe("video streaming", () => {
     const full = await req("GET", a.url);
     expect(full.raw.headers["accept-ranges"]).toBe("bytes");
     expect(full.raw.rawPayload.length).toBe(5000);
+    // No sandbox for media: it would give the player page a null origin and block playback.
+    expect(full.raw.headers["content-security-policy"]).not.toMatch(/sandbox/);
+    expect(full.raw.headers["content-security-policy"]).toContain("media-src 'self'");
 
     const part = await req("GET", a.url, undefined, { range: "bytes=100-199" });
     expect(part.code).toBe(206);

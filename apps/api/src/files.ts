@@ -250,9 +250,15 @@ export async function streamAttachment(
   const inline = !unsafe && INLINE_OK.test(mime) && q.download !== "1";
   const encoded = encodeURIComponent(row.filename);
   // PDFs need the browser's viewer, which a sandboxed CSP blocks; they can't run page scripts anyway.
+  // Video/audio opened in their own tab: the browser's player page re-requests the file, and a
+  // sandboxed page has a "null" origin, so Chrome blocks that request (CORS) and nothing plays.
+  // Media files can't run scripts, so they don't need the sandbox.
+  const media = inline && /^(video|audio)\//.test(mime);
   const csp = mime === "application/pdf"
     ? "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; object-src 'self'"
-    : "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox";
+    : media
+      ? "default-src 'none'; media-src 'self'; style-src 'unsafe-inline'"
+      : "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox";
   reply
     .header("Content-Type", unsafe ? "application/octet-stream" : mime)
     .header("Content-Disposition", `${inline ? "inline" : "attachment"}; filename="${encoded}"; filename*=UTF-8''${encoded}`)
