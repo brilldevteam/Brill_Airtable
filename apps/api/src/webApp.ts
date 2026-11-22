@@ -41,10 +41,14 @@ export const WEB_CSP = [
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
-  "frame-ancestors 'none'",
 ].join("; ");
 
-export function registerWebApp(app: FastifyInstance, webDir: string) {
+/** Who may show the app inside a frame: nobody, unless EMBED_ORIGINS lists a mobile wrapper's origin. */
+export const frameAncestors = (embedOrigins: string[] = []) =>
+  embedOrigins.length ? `frame-ancestors 'self' ${embedOrigins.join(" ")}` : "frame-ancestors 'none'";
+
+export function registerWebApp(app: FastifyInstance, webDir: string, embedOrigins: string[] = []) {
+  const csp = `${WEB_CSP}; ${frameAncestors(embedOrigins)}`;
   const root = resolve(webDir);
   const index = join(root, "index.html");
   if (!existsSync(index)) throw new Error(`WEB_DIR has no index.html: ${root} — run "pnpm build" first`);
@@ -60,10 +64,12 @@ export function registerWebApp(app: FastifyInstance, webDir: string) {
     let target = index;
     if (inside && path !== "/" && existsSync(file) && statSync(file).isFile()) target = file;
     const isIndex = target === index;
+    // The service worker and manifest must update as soon as a new version is deployed.
+    const fresh = isIndex || path === "/sw.js" || path === "/manifest.webmanifest";
     reply
       .header("content-type", TYPES[extname(target).toLowerCase()] ?? "application/octet-stream")
-      .header("cache-control", isIndex ? "no-cache" : path.startsWith("/assets/") ? "public, max-age=31536000, immutable" : "public, max-age=3600")
-      .header("content-security-policy", WEB_CSP);
+      .header("cache-control", fresh ? "no-cache" : path.startsWith("/assets/") ? "public, max-age=31536000, immutable" : "public, max-age=3600")
+      .header("content-security-policy", csp);
     return reply.send(createReadStream(target));
   });
 }

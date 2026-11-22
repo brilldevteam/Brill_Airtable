@@ -33,7 +33,13 @@ const BACKUP_KEEP = Number(env.BACKUP_KEEP ?? 14);
 if (PRODUCTION && !env.APP_URL) throw new Error("Set APP_URL to the site's address, e.g. https://airtable.brillcrew.com");
 
 const db = await openDb(DATA_DIR);
+// Mobile app wrapper that shows the site in an iframe: list its origin(s), comma-separated.
+const EMBED_ORIGINS = (env.EMBED_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+for (const o of EMBED_ORIGINS) {
+  if (!/^(https:\/\/[a-z0-9.-]+(:\d+)?|capacitor:\/\/localhost|ionic:\/\/localhost)$/i.test(o)) throw new Error(`EMBED_ORIGINS: "${o}" should look like https://app.example.com`);
+}
 const app = buildApp(db, {
+  embedOrigins: EMBED_ORIGINS,
   logger: true, secureCookies: SECURE_COOKIES, filesDir: FILES_DIR, trustProxy: TRUST_PROXY,
   mailer, appUrl: APP_URL, devMail: !PRODUCTION && !!mailer.outbox,
   webDir: SERVE_WEB ? WEB_DIR : undefined, signups: SIGNUPS,

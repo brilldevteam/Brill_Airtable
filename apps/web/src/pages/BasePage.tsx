@@ -1,10 +1,10 @@
 import type { Table } from "@brill/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronDown, ChevronRight, LayoutDashboard, Pencil, Plus, Sheet, Trash2, Users, Zap } from "lucide-react";
+import { Check, ChevronDown, LayoutDashboard, Pencil, Plus, Sheet, Trash2, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
-import { BASE_COLORS } from "../colors";
+import { BASE_COLORS, BASE_TINTS } from "../colors";
 import { AppBar } from "../components/AppBar";
 import { useDialogs } from "../components/Dialogs";
 import { Popover, anchorOf, type Anchor } from "../components/Popover";
@@ -13,13 +13,18 @@ import { AutomationsPanel } from "../components/AutomationsPanel";
 import { DashboardView, NewDashboardDialog, useDashboards } from "../components/DashboardView";
 import type { Dashboard } from "@brill/shared";
 import { TableWorkspace } from "../components/TableWorkspace";
+import { FormsPage } from "../components/FormsPage";
+import { BaseIcon } from "../components/BaseIcon";
 import { useBaseEvents } from "../useBaseEvents";
 
 const RECORD_ACCESS_LABEL = { all: "Everyone who can edit", team: "Workspace team only", creators: "Creators and owners only" } as const;
 
 export function BasePage() {
   const { baseId, tableId, dashId } = useParams();
-  const dashMode = useLocation().pathname.startsWith(`/base/${baseId}/dash`);
+  const pathname = useLocation().pathname;
+  const dashMode = pathname.startsWith(`/base/${baseId}/dash`);
+  const formsMode = pathname === `/base/${baseId}/forms`;
+  const dataMode = !dashMode && !formsMode;
   const dashQ = useDashboards(baseId!);
   const dashboards = dashQ.data?.dashboards ?? [];
   const [dashMenu, setDashMenu] = useState<{ dash: Dashboard; anchor: Anchor } | null>(null);
@@ -34,19 +39,16 @@ export function BasePage() {
   const [automating, setAutomating] = useState(false);
   const [newDash, setNewDash] = useState(false);
   const live = useBaseEvents(baseId);
+  // "Recently opened" on the home page.
+  useEffect(() => { if (baseId) api.baseOpened(baseId).catch(() => undefined); }, [baseId]);
 
   const tables = q.data?.tables ?? [];
   useEffect(() => {
-    if (dashMode) return;
-    // Opening a base (no table in the address) shows its first dashboard when it has one.
-    if (!tableId) {
-      if (dashQ.isLoading) return;
-      if (dashboards[0]) return nav(`/base/${baseId}/dash/${dashboards[0].id}`, { replace: true });
-    }
+    if (!dataMode) return;
     if (q.data && (!tableId || !tables.some((t) => t.id === tableId)) && tables[0]) {
       nav(`/base/${baseId}/${tables[0].id}`, { replace: true });
     }
-  }, [q.data, tableId, dashMode, dashQ.isLoading, dashboards.length]);
+  }, [q.data, tableId, dataMode]);
   // "Data" goes back to the table you last had open in this base (remembered in this browser).
   const lastKey = `brill.lastTable.${baseId}`;
   useEffect(() => {
@@ -122,32 +124,27 @@ export function BasePage() {
 
   return (
     <div className="base-page">
-      <AppBar>
-        <div className="divider" />
-        <Link to="/" className="muted hide-sm" style={{ textDecoration: "none", fontSize: 13.5 }}>Bases</Link>
-        <ChevronRight size={14} className="muted hide-sm" />
-        <button className="base-switch" onClick={(e) => canDesign && setBaseMenu(anchorOf(e.currentTarget))}>
-          <span className="base-dot" style={{ background: color }}>{base.name.slice(0, 2)}</span>
+      <AppBar compact>
+        <button className="base-switch" onClick={(e) => canDesign && setBaseMenu(anchorOf(e.currentTarget))} title={canDesign ? "Base options" : base.name}>
+          <BaseIcon name={base.name} color={base.color} icon={base.icon} logo={base.logo} baseId={base.id} size={28} />
           <span className="name">{base.name}</span>
           {canDesign && <ChevronDown size={15} />}
         </button>
-        <div className="spacer" />
+        <nav className="base-nav" aria-label="Base sections">
+          <Link className={dataMode ? "on" : ""} to={`/base/${baseId}/${dataTableId ?? ""}`}>Data</Link>
+          {canDesign && !guest && <button className={automating ? "on" : ""} onClick={() => setAutomating(true)}>Automations</button>}
+          <Link className={dashMode ? "on" : ""} to={`/base/${baseId}/dash`}>Dashboards</Link>
+          <Link className={formsMode ? "on" : ""} to={`/base/${baseId}/forms`}>Forms</Link>
+        </nav>
         <span className={"live-dot" + (live ? " on" : "")} title={live ? "Live — changes from your team appear automatically" : "Reconnecting…"}>
-          <span /> {live ? "Live" : "Offline"}
+          <span /> <i className="live-label hide-sm">{live ? "Live" : "Offline"}</i>
         </span>
-        {canDesign && !guest && (
-          <button className="btn sm" onClick={() => setAutomating(true)} title="Automations"><Zap size={14} /> <span className="hide-sm">Automations</span></button>
-        )}
-        <button className="btn sm" onClick={() => setSharing(true)}><Users size={14} /> Share</button>
+        <button className="btn sm share-btn" onClick={() => setSharing(true)}><Users size={14} /> Share</button>
       </AppBar>
       {sharing && <ShareDialog baseId={base.id} onClose={() => setSharing(false)} />}
       {automating && <AutomationsPanel baseId={base.id} tables={tables} onClose={() => setAutomating(false)} />}
 
-      <nav className="table-tabs">
-        <div className="mode-switch" role="tablist" aria-label="Dashboards or data">
-          <Link role="tab" aria-selected={dashMode} className={dashMode ? "on" : ""} to={`/base/${baseId}/dash`}><LayoutDashboard size={14} /> Dashboards</Link>
-          <Link role="tab" aria-selected={!dashMode} className={!dashMode ? "on" : ""} to={`/base/${baseId}/${dataTableId ?? ""}`}><Sheet size={14} /> Data</Link>
-        </div>
+      {!formsMode && <nav className="table-tabs" style={{ ["--base-tint" as string]: BASE_TINTS[base.color] ?? BASE_TINTS.blue }}>
         {dashMode && dashboards.map((d) => (
           <Link
             key={d.id}
@@ -168,7 +165,7 @@ export function BasePage() {
         {dashMode && canDesign && (
           <button className="tab add" onClick={addDashboard}><Plus size={15} /> New dashboard</button>
         )}
-        {!dashMode && tables.map((t) => {
+        {dataMode && tables.map((t) => {
           const active = t.id === tableId;
           return (
             <Link
@@ -178,7 +175,6 @@ export function BasePage() {
               onDoubleClick={(e) => { e.preventDefault(); if (canDesign) renameTable(t); }}
               onContextMenu={(e) => { if (!canDesign) return; e.preventDefault(); setTableMenu({ table: t, anchor: anchorOf(e.currentTarget) }); }}
             >
-              <Sheet size={15} />
               {t.name}
               {active && canDesign && (
                 <span
@@ -193,15 +189,16 @@ export function BasePage() {
             </Link>
           );
         })}
-        {!dashMode && canDesign && (
-          <button className="tab add" onClick={addTable}>
-            <Plus size={15} /> Add table
+        {dataMode && canDesign && (
+          <button className="tab add" onClick={addTable} title="Add a table">
+            <Plus size={15} /> <span className="hide-sm">Add table</span>
           </button>
         )}
-      </nav>
+      </nav>}
 
       {error && <div className="error banner" onClick={() => setError(null)}>{error}</div>}
-      {!dashMode && tableId && tables.some((t) => t.id === tableId) && (
+      {formsMode && <FormsPage baseId={baseId!} tables={tables} canEdit={role !== "commenter" && role !== "read"} />}
+      {dataMode && tableId && tables.some((t) => t.id === tableId) && (
         <TableWorkspace key={tableId} baseId={baseId!} tableId={tableId} tables={tables} role={role} guest={guest} />
       )}
       {dashMode && (() => {

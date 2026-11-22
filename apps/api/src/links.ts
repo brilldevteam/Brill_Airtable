@@ -15,6 +15,7 @@ import {
 } from "@brill/shared";
 import type { Db } from "./db";
 import { HttpError } from "./errors";
+import { addNotifications } from "./notifications";
 
 /**
  * Linked records & computed fields engine.
@@ -306,6 +307,16 @@ export async function writeCells(
   }
   await db.query(`UPDATE records SET cells=$2, updated_at=now(), updated_by=$3 WHERE id=$1`, [recordId, after, userId]);
   await logHistory(db, recordId, userId, history, diffOf(before, after, changed));
+
+  // People newly added to a person field that notifies them.
+  for (const fid of changed) {
+    const f = byId.get(fid);
+    if (f?.type !== "user" || !f.options.notify) continue;
+    const ids = (v: unknown) => (Array.isArray(v) ? v.map(String) : v ? [String(v)] : []);
+    const was = new Set(ids(before[fid]));
+    const added = ids(after[fid]).filter((id) => !was.has(id));
+    if (added.length) await addNotifications(db, added, { kind: "assigned", tableId, recordId, actorId: userId, data: { field: f.name } });
+  }
 
   // LAST_MODIFIED_TIME() formulas depend on any edit.
   const changes: Change[] = [{ recordId, tableId, fields: new Set([...changed, MODIFIED_DEP]) }];

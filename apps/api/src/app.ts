@@ -10,6 +10,9 @@ import { HttpError } from "./errors";
 import { MAX_FILE_BYTES, registerFiles } from "./files";
 import { registerActivity } from "./activity";
 import { registerImportExport } from "./importExport";
+import { registerAirtableImport, type AirtableImportOptions } from "./airtableImport";
+import { registerBaseLogos } from "./baseLogos";
+import { registerNotifications } from "./notifications";
 import { registerMembers } from "./members";
 import { registerRealtime } from "./realtime";
 import { registerRoutes } from "./routes";
@@ -38,6 +41,14 @@ export interface AppOptions {
   webDir?: string;
   /** "open" (anyone can sign up) or "invite" (only the first account and people with an invite). */
   signups?: "open" | "invite";
+  /**
+   * Origins allowed to show the app in a frame (e.g. a mobile app wrapper using an iframe),
+   * like "https://app.example.com". Empty: the app can't be framed. When set, the session
+   * cookie becomes SameSite=None; Secure; Partitioned so it also works inside that frame.
+   */
+  embedOrigins?: string[];
+  /** Importing from Airtable (tests point it at a stand-in API). */
+  airtable?: AirtableImportOptions;
 }
 
 export function buildApp(db: Db, opts: AppOptions) {
@@ -57,7 +68,11 @@ export function buildApp(db: Db, opts: AppOptions) {
     reply.header("referrer-policy", "strict-origin-when-cross-origin");
     // Attachments may be previewed (PDFs) inside the app's own pages; nothing else may be framed.
     const file = req.url.includes("/attachments/") || req.url.includes("/files/");
-    reply.header("x-frame-options", file ? "SAMEORIGIN" : "DENY");
+    const embedding = (opts.embedOrigins?.length ?? 0) > 0;
+    const page = !req.url.startsWith("/api/");
+    // When a wrapper may frame the app, its pages (and the files they preview) can't say DENY;
+    // their CSP frame-ancestors lists exactly who may frame them instead.
+    if (!(embedding && (page || file))) reply.header("x-frame-options", file ? "SAMEORIGIN" : "DENY");
     reply.header("permissions-policy", "camera=(self), microphone=(), geolocation=(), payment=()");
     reply.header("cross-origin-opener-policy", "same-origin");
     reply.header("x-request-id", req.id);
@@ -103,7 +118,7 @@ export function buildApp(db: Db, opts: AppOptions) {
     mailer, appUrl, allowLoopbackWebhooks: opts.allowLoopbackWebhooks, log: (e) => app.log.error(e, "automation failed"),
   }));
   app.after(() => {
-    registerAuth(app, db, { secureCookies: opts.secureCookies ?? false, mailer, appUrl, signups: opts.signups ?? "open" });
+    registerAuth(app, db, { secureCookies: opts.secureCookies ?? false, mailer, appUrl, signups: opts.signups ?? "open", embedded: (opts.embedOrigins?.length ?? 0) > 0 });
     registerRealtime(app, db);
     registerRoutes(app, db);
     const files = registerFiles(app, db, opts.filesDir);
@@ -114,6 +129,9 @@ export function buildApp(db: Db, opts: AppOptions) {
     registerAutomations(app, db);
     registerDashboards(app, db);
     registerShare(app, db, files);
+    registerAirtableImport(app, db, files.saveFile, opts.airtable);
+    registerBaseLogos(app, db, opts.filesDir);
+    registerNotifications(app, db, { mailer, appUrl });
   });
   if (opts.devMail && mailer.outbox) {
     const outbox = mailer.outbox;
@@ -127,6 +145,6 @@ export function buildApp(db: Db, opts: AppOptions) {
       return reply.status(503).send({ ok: false, error: "database unavailable" });
     }
   });
-  if (opts.webDir) registerWebApp(app, opts.webDir);
+  if (opts.webDir) registerWebApp(app, opts.webDir, opts.embedOrigins);
   return app;
 }

@@ -182,7 +182,7 @@ export function registerShare(app: FastifyInstance, db: Db, files: { saveFile: S
       const recId = newId("rec");
       await t.query(`INSERT INTO records (id, table_id, cells) VALUES ($1,$2,'{}')`, [recId, view.table_id]);
       const schema = new Schema(t);
-      const prepared = await prepareCells(t, view.table_id, cells);
+      const prepared = await prepareCells(t, view.table_id, cells, { create: true });
       await writeCells(t, schema, null, view.table_id, recId, prepared, "create"); // no user: submitted by the public
       await computeAllForRecord(t, schema, view.table_id, recId);
       return recId;

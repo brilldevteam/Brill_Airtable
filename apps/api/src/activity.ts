@@ -7,6 +7,7 @@ import type { Db } from "./db";
 import { HttpError } from "./errors";
 import { attachmentInfos } from "./files";
 import { labelsFor, Schema } from "./links";
+import { addNotifications, mentionedIds } from "./notifications";
 
 /** Record comments and change history, shown together in the record's activity panel. */
 export function registerActivity(app: FastifyInstance, db: Db) {
@@ -31,6 +32,12 @@ export function registerActivity(app: FastifyInstance, db: Db) {
       `INSERT INTO record_comments (id, record_id, user_id, body) VALUES ($1,$2,$3,$4) RETURNING id, created_at`,
       [newId("cmt"), recordId, user.id, body],
     );
+    const mentioned = mentionedIds(body);
+    if (mentioned.length) {
+      await addNotifications(db, mentioned, {
+        kind: "mention", tableId: await recordTableId(db, recordId), recordId, actorId: user.id, data: { comment: body.slice(0, 500) },
+      });
+    }
     return { comment: { id: c.id, body, createdAt: new Date(c.created_at).toISOString(), userId: user.id, userName: user.name } };
   });
 

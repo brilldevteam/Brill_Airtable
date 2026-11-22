@@ -51,7 +51,7 @@ export function GalleryView({ ctx }: { ctx: ViewContext }) {
                 let content: React.ReactNode;
                 if (f.type === "singleSelect") content = <ChoicePill field={f} id={String(v)} />;
                 else if (f.type === "multipleSelect") content = (v as string[]).map((id) => <ChoicePill key={id} field={f} id={id} />);
-                else if (f.type === "date") content = formatDateCell(String(v));
+                else if (f.type === "date") content = formatDateCell(String(v), f.options);
                 else if (f.type === "checkbox") content = "Yes";
                 else if (f.type === "attachment") content = `${(v as string[]).length} file${(v as string[]).length === 1 ? "" : "s"}`;
                 else content = cellToText(f, v, labels);

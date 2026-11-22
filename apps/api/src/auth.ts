@@ -47,7 +47,7 @@ const VERIFY_HOURS = 24;
 const RESET_MINUTES = 60;
 export const hashToken = (t: string) => createHash("sha256").update(t).digest("base64url");
 
-export function registerAuth(app: FastifyInstance, db: Db, opts: { secureCookies: boolean; mailer: Mailer; appUrl: string; signups?: "open" | "invite" }) {
+export function registerAuth(app: FastifyInstance, db: Db, opts: { secureCookies: boolean; mailer: Mailer; appUrl: string; signups?: "open" | "invite"; embedded?: boolean }) {
   // Brute-force protection: per address and per account.
   const loginByIp = limiter(30, 15 * 60_000);
   const loginByEmail = limiter(10, 15 * 60_000, "Too many sign-in attempts for this account — wait 15 minutes and try again");
@@ -95,7 +95,10 @@ export function registerAuth(app: FastifyInstance, db: Db, opts: { secureCookies
     setCookie(reply, sid, expires);
   }
   function setCookie(reply: FastifyReply, sid: string, expires: Date) {
-    reply.setCookie(SESSION_COOKIE, sid, { httpOnly: true, sameSite: "lax", secure: opts.secureCookies, path: "/", expires });
+    // Inside a cross-site frame (EMBED_ORIGINS) a Lax cookie isn't sent, so it must be None + Secure + Partitioned.
+    reply.setCookie(SESSION_COOKIE, sid, opts.embedded
+      ? { httpOnly: true, sameSite: "none", secure: true, partitioned: true, path: "/", expires }
+      : { httpOnly: true, sameSite: "lax", secure: opts.secureCookies, path: "/", expires });
   }
 
   // Attach the logged-in user (if any) to every request; slide the idle expiry now and then.
@@ -166,7 +169,7 @@ export function registerAuth(app: FastifyInstance, db: Db, opts: { secureCookies
 
   app.post("/api/auth/logout", async (req, reply) => {
     if (req.sessionHash) await db.query(`DELETE FROM sessions WHERE id = $1`, [req.sessionHash]);
-    reply.clearCookie(SESSION_COOKIE, { path: "/" });
+    reply.clearCookie(SESSION_COOKIE, opts.embedded ? { path: "/", sameSite: "none", secure: true, partitioned: true } : { path: "/" });
     return { ok: true };
   });
 

@@ -249,7 +249,7 @@ export class AutomationEngine {
         const changed = await this.db.tx(async (t) => {
           const fields = await loadFields(t, action.tableId);
           const typed = await typecastCells(t, action.tableId, fields, input, { dateOrder: "dmy", userId: userId ?? "" });
-          const cells = await prepareCells(t, action.tableId, typed);
+          const cells = await prepareCells(t, action.tableId, typed, { create: true });
           await t.query(`INSERT INTO records (id, table_id, cells, created_by, updated_by) VALUES ($1,$2,'{}',$3,$3)`, [id, action.tableId, userId]);
           const schema = new Schema(t);
           await writeCells(t, schema, userId, action.tableId, id, cells, "create");

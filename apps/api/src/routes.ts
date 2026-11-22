@@ -62,7 +62,11 @@ const choiceInput = z.object({ id: z.string().optional(), name: z.string().trim(
 const fieldOptionsInput = z
   .object({
     precision: z.number().int().min(0).max(8).optional(),
+    defaultChoice: z.string().nullable().optional(),
+    notify: z.boolean().optional(),
     includeTime: z.boolean().optional(),
+    dateFormat: z.enum(["local", "friendly", "us", "european", "iso"]).optional(),
+    timeFormat: z.enum(["12", "24"]).optional(),
     choices: z.array(choiceInput).optional(),
     linkedTableId: z.string().optional(),
     linkFieldId: z.string().optional(),
@@ -90,7 +94,12 @@ function buildOptions(type: FieldType, input: z.infer<typeof fieldOptionsInput>)
   if (type === "rating") opts.max = Math.min(10, Math.max(1, o.max ?? 5));
   if (type === "duration") opts.durationFormat = o.durationFormat ?? "h:mm";
   if (type === "user") opts.multiple = o.multiple ?? false;
+  if (type === "user" && o.notify) opts.notify = true;
   if (type === "date") opts.includeTime = o.includeTime ?? false;
+  if (type === "date" || type === "createdTime" || type === "lastModifiedTime") {
+    if (o.dateFormat) opts.dateFormat = o.dateFormat;
+    if (o.timeFormat) opts.timeFormat = o.timeFormat;
+  }
   if (type === "singleSelect" || type === "multipleSelect") {
     const seen = new Set<string>();
     opts.choices = (o.choices ?? []).filter((c) => !seen.has(c.name) && seen.add(c.name)).map((c, i) => ({
@@ -98,6 +107,10 @@ function buildOptions(type: FieldType, input: z.infer<typeof fieldOptionsInput>)
       name: c.name,
       color: c.color ?? COLORS[i % COLORS.length],
     }));
+    const choices = opts.choices as { id: string; name: string }[];
+    const d = o.defaultChoice === undefined ? (o as FieldOptions).defaultChoiceId : o.defaultChoice;
+    const hit = d ? choices.find((c) => c.name === d || c.id === d) : undefined;
+    if (hit) opts.defaultChoiceId = hit.id;
   }
   if (type === "link") {
     opts.linkedTableId = o.linkedTableId;
@@ -117,9 +130,24 @@ function buildOptions(type: FieldType, input: z.infer<typeof fieldOptionsInput>)
 }
 
 /** Validate input cells, including that linked records and attachments exist. */
-export async function prepareCells(t: Db, tableId: string, input: Record<string, unknown>) {
+/** Cells prepareCells filled in from defaults (not typed by the person) — field locks don't apply to them. */
+const DEFAULTED = new WeakMap<object, Set<string>>();
+export const givenKeys = (cells: Record<string, unknown>) => Object.keys(cells).filter((k) => !DEFAULTED.get(cells)?.has(k));
+
+export async function prepareCells(t: Db, tableId: string, input: Record<string, unknown>, opts: { create?: boolean } = {}) {
   const fields = await loadFields(t, tableId);
   const cells = normalizeCells(fields, input);
+  if (opts.create) {
+    // New records start with each select field's default option (unless given a value).
+    for (const f of fields) {
+      const d = f.options.defaultChoiceId;
+      if (d && !(f.id in cells) && f.options.choices?.some((c) => c.id === d)) {
+        cells[f.id] = f.type === "multipleSelect" ? [d] : d;
+        if (!DEFAULTED.has(cells)) DEFAULTED.set(cells, new Set());
+        DEFAULTED.get(cells)!.add(f.id);
+      }
+    }
+  }
   for (const [fid, v] of Object.entries(cells)) {
     const f = fields.find((x) => x.id === fid)!;
     if (f.type === "link" && Array.isArray(v)) await assertLinkTargets(t, f, v);
@@ -221,15 +249,17 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
       [user.id],
     );
     const bases = await db.query(
-      `SELECT b.id, b.workspace_id AS "workspaceId", b.name, b.color FROM bases b
+      `SELECT b.id, b.workspace_id AS "workspaceId", b.name, b.color, b.icon, b.logo, COALESCE(p.starred, false) AS starred, p.last_opened_at AS "lastOpenedAt" FROM bases b
        JOIN workspace_members m ON m.workspace_id = b.workspace_id
+       LEFT JOIN base_prefs p ON p.base_id = b.id AND p.user_id = $1
        WHERE m.user_id = $1 ORDER BY b.created_at`,
       [user.id],
     );
     // Bases someone shared with this user directly (e.g. a client), outside their own workspaces.
     const sharedBases = await db.query(
-      `SELECT b.id, b.workspace_id AS "workspaceId", b.name, b.color, bm.role, w.name AS "workspaceName"
+      `SELECT b.id, b.workspace_id AS "workspaceId", b.name, b.color, b.icon, b.logo, COALESCE(p.starred, false) AS starred, p.last_opened_at AS "lastOpenedAt", bm.role, w.name AS "workspaceName"
        FROM base_members bm JOIN bases b ON b.id = bm.base_id JOIN workspaces w ON w.id = b.workspace_id
+       LEFT JOIN base_prefs p ON p.base_id = b.id AND p.user_id = $1
        WHERE bm.user_id = $1
          AND NOT EXISTS (SELECT 1 FROM workspace_members m WHERE m.workspace_id = b.workspace_id AND m.user_id = $1)
        ORDER BY bm.created_at`,
@@ -256,11 +286,52 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
   app.patch("/api/bases/:baseId", async (req) => {
     const user = requireUser(req);
     const { baseId } = req.params as { baseId: string };
-    const body = z.object({ name: nameSchema.optional(), color: z.string().optional() }).parse(req.body);
+    const body = z.object({
+      name: nameSchema.optional(),
+      color: z.string().max(20).optional(),
+      icon: z.string().regex(/^[a-z-]{1,30}$/).nullable().optional(),
+    }).parse(req.body);
     await baseAccess(db, user.id, baseId, "creator");
-    await db.query(`UPDATE bases SET name = COALESCE($2,name), color = COALESCE($3,color) WHERE id=$1`, [
-      baseId, body.name ?? null, body.color ?? null,
+    await db.query(`UPDATE bases SET name = COALESCE($2,name), color = COALESCE($3,color), icon = CASE WHEN $4 THEN $5 ELSE icon END WHERE id=$1`, [
+      baseId, body.name ?? null, body.color ?? null, body.icon !== undefined, body.icon ?? null,
     ]);
+    return { ok: true };
+  });
+
+  app.post("/api/bases/:baseId/move", async (req) => {
+    const user = requireUser(req);
+    const { baseId } = req.params as { baseId: string };
+    const { workspaceId } = z.object({ workspaceId: z.string() }).parse(req.body);
+    await baseAccess(db, user.id, baseId, "owner");
+    await workspaceAccess(db, user.id, workspaceId, "creator");
+    await db.query(`UPDATE bases SET workspace_id=$2 WHERE id=$1`, [baseId, workspaceId]);
+    return { ok: true };
+  });
+
+  /** Remember that this person opened the base (for "Recently opened" on the home page). */
+  app.post("/api/bases/:baseId/opened", async (req) => {
+    const user = requireUser(req);
+    const { baseId } = req.params as { baseId: string };
+    await baseAccess(db, user.id, baseId, "read");
+    await db.query(
+      `INSERT INTO base_prefs (user_id, base_id, last_opened_at) VALUES ($1,$2,now())
+       ON CONFLICT (user_id, base_id) DO UPDATE SET last_opened_at = now()`,
+      [user.id, baseId],
+    );
+    return { ok: true };
+  });
+
+  /** Star or unstar a base, just for this person. */
+  app.put("/api/bases/:baseId/star", async (req) => {
+    const user = requireUser(req);
+    const { baseId } = req.params as { baseId: string };
+    const { starred } = z.object({ starred: z.boolean() }).parse(req.body);
+    await baseAccess(db, user.id, baseId, "read");
+    await db.query(
+      `INSERT INTO base_prefs (user_id, base_id, starred) VALUES ($1,$2,$3)
+       ON CONFLICT (user_id, base_id) DO UPDATE SET starred = $3`,
+      [user.id, baseId, starred],
+    );
     return { ok: true };
   });
 
@@ -569,6 +640,35 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
       if (fieldId === table!.primary_field_id && !PRIMARY_TYPES.has(type)) {
         throw new HttpError(400, "The primary field can't be that type");
       }
+      // Attachment and person fields can swap with plain fields: values become names (files and
+      // people → text) or are cleared (text → files/people — there's nothing to turn into a file).
+      const SWAPPABLE = new Set<FieldType>(["attachment", "user"]);
+      const plainOrSwappable = (t: FieldType) => SWAPPABLE.has(t) || !STRUCTURAL_TYPES.has(t);
+      if (type !== old.type && (SWAPPABLE.has(type) || SWAPPABLE.has(old.type)) && plainOrSwappable(type) && plainOrSwappable(old.type)) {
+        const name = body.name ?? old.name;
+        if (name !== old.name && await t.one(`SELECT 1 FROM fields WHERE table_id=$1 AND name=$2 AND id<>$3`, [tableId, name, fieldId])) {
+          throw new HttpError(409, `A field named "${name}" already exists`);
+        }
+        const options = buildOptions(type, body.options ?? {});
+        const next: Field = { ...old, name, type, options };
+        const rows = await t.query<{ id: string; cells: Record<string, CellValue> }>(`SELECT id, cells FROM records WHERE table_id=$1 AND cells ? $2`, [tableId, fieldId]);
+        const ids = rows.flatMap((r) => (Array.isArray(r.cells[fieldId]) ? (r.cells[fieldId] as string[]) : typeof r.cells[fieldId] === "string" ? [r.cells[fieldId] as string] : []));
+        const names: Record<string, string> = old.type === "user" ? await userNames(t, ids)
+          : old.type === "attachment" ? Object.fromEntries(Object.values(await attachmentInfos(t, ids)).map((a) => [a.id, a.filename])) : {};
+        await t.query(`UPDATE fields SET name=$2, type=$3, options=$4 WHERE id=$1`, [fieldId, name, type, options]);
+        const schema = new Schema(t);
+        for (const r of rows) {
+          let after: CellValue = null;
+          if (!SWAPPABLE.has(type)) {
+            const v = r.cells[fieldId];
+            const text = (Array.isArray(v) ? v : [v]).map((x) => names[String(x)] ?? "").filter(Boolean).join(", ");
+            after = text ? safeNormalize(next, text) : null;
+          }
+          await writeCells(t, schema, user.id, tableId, r.id, { [fieldId]: after });
+        }
+        await refreshFormulasUsing(t, tableId, fieldId);
+        return toField(await t.one(`SELECT * FROM fields WHERE id=$1`, [fieldId]));
+      }
       if (type !== old.type && (STRUCTURAL_TYPES.has(type) || STRUCTURAL_TYPES.has(old.type))) {
         throw new HttpError(400, "Linked and calculated fields can't be converted to another type yet. Create a new field instead.");
       }
@@ -672,8 +772,8 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
     const access = await tableAccess(db, user.id, tableId, "editor");
     await checkRecordAccess(db, access, tableId, "add");
     const record = await db.tx(async (t) => {
-      const cells = await prepareCells(t, tableId, body.cells);
-      await checkFieldEdits(t, access, tableId, Object.keys(cells));
+      const cells = await prepareCells(t, tableId, body.cells, { create: true });
+      await checkFieldEdits(t, access, tableId, givenKeys(cells));
       const id = newId("rec");
       await t.query(`INSERT INTO records (id, table_id, cells, created_by, updated_by) VALUES ($1,$2,'{}',$3,$3)`, [id, tableId, user.id]);
       const schema = new Schema(t);

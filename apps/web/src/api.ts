@@ -29,6 +29,16 @@ async function call<T>(method: string, url: string, body?: unknown): Promise<T> 
 }
 
 export interface DevEmail { id: number; to: string; subject: string; text: string; html: string; sentAt: string }
+export interface AppNotification {
+  id: string; kind: "mention" | "assigned"; title: string; body: string; baseName: string; link: string; read: boolean; createdAt: string;
+}
+export interface ImportJob {
+  id: string;
+  status: "running" | "done" | "failed";
+  step: string;
+  error?: string;
+  bases: { airtableId: string; name: string; status: "waiting" | "running" | "done" | "failed"; baseId?: string; tables: number; records: number; files: number; notes: string[]; error?: string }[];
+}
 export type Role = "owner" | "creator" | "editor" | "commenter" | "read";
 export interface Workspace { id: string; name: string; role: Role }
 export interface Member { userId: string; name: string; email: string; role: Role }
@@ -87,7 +97,7 @@ export interface FieldInput {
   name?: string;
   type?: FieldType;
   editAccess?: EditAccess;
-  options?: Omit<Partial<FieldOptions>, "choices"> & { choices?: { id?: string; name: string; color?: string }[] };
+  options?: Omit<Partial<FieldOptions>, "choices"> & { choices?: { id?: string; name: string; color?: string }[]; defaultChoice?: string | null };
 }
 
 export const api = {
@@ -110,10 +120,28 @@ export const api = {
   resetPassword: (token: string, password: string) => call<{ user: User }>("POST", "/api/auth/reset-password", { token, password }),
   devMail: () => call<{ emails: DevEmail[] }>("GET", "/api/dev/mail"),
 
+  airtableBases: (token: string) => call<{ bases: { id: string; name: string; permissionLevel: string }[] }>("POST", "/api/import/airtable/bases", { token }),
+  startAirtableImport: (body: { token: string; workspaceId: string; bases: { id: string; name: string }[] }) =>
+    call<{ job: ImportJob }>("POST", "/api/import/airtable", body),
+  importJob: (id: string) => call<{ job: ImportJob }>("GET", `/api/import/jobs/${id}`),
+  moveBase: (id: string, workspaceId: string) => call<{ ok: true }>("POST", `/api/bases/${id}/move`, { workspaceId }),
+  removeBaseLogo: (id: string) => call<{ ok: true }>("DELETE", `/api/bases/${id}/logo`),
+  uploadBaseLogo: async (id: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file, file.name);
+    const res = await fetch(`/api/bases/${id}/logo`, { method: "POST", credentials: "same-origin", headers: { "X-Brill-Upload": "1" }, body: form });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error ?? "Upload failed");
+    return data as { logo: string };
+  },
+  notifications: () => call<{ unread: number; notifications: AppNotification[] }>("GET", "/api/notifications"),
+  markNotificationsRead: (ids?: string[]) => call<{ ok: true }>("POST", "/api/notifications/read", ids ? { ids } : {}),
+  baseOpened: (id: string) => call<{ ok: true }>("POST", `/api/bases/${id}/opened`, {}),
+  starBase: (id: string, starred: boolean) => call<{ ok: true }>("PUT", `/api/bases/${id}/star`, { starred }),
   workspaces: () => call<{ workspaces: Workspace[]; bases: Base[]; sharedBases: SharedBase[] }>("GET", "/api/workspaces"),
   createBase: (wsId: string, name: string, color: string) =>
     call<{ base: Base; firstTableId: string }>("POST", `/api/workspaces/${wsId}/bases`, { name, color }),
-  updateBase: (id: string, patch: { name?: string; color?: string }) => call("PATCH", `/api/bases/${id}`, patch),
+  updateBase: (id: string, patch: { name?: string; color?: string; icon?: string | null }) => call("PATCH", `/api/bases/${id}`, patch),
   deleteBase: (id: string) => call("DELETE", `/api/bases/${id}`),
 
   base: (id: string) => call<{ base: Base; tables: Table[]; role: Role; guest: boolean }>("GET", `/api/bases/${id}`),

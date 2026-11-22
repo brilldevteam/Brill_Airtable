@@ -4,6 +4,7 @@ import { ArrowRight, History, MessageSquare, Send, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { initials } from "./AppBar";
+import { useCollaborators } from "./PeoplePicker";
 
 function timeAgo(iso: string) {
   const s = (Date.now() - new Date(iso).getTime()) / 1000;
@@ -35,14 +36,43 @@ function Comments({ recordId, canComment }: { recordId: string; canComment: bool
   const me = qc.getQueryData<{ user: { id: string } | null }>(["me"])?.user;
   const [text, setText] = useState("");
   const list = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLTextAreaElement>(null);
+  const people = useCollaborators().data?.users ?? [];
+  // "@Name" typed via the picker → remembered, so the comment is saved as @[Name](id).
+  const [picked, setPicked] = useState<Record<string, string>>({});
+  const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
+  const [hi, setHi] = useState(0);
+  const matches = mention ? people.filter((p) => p.name.toLowerCase().includes(mention.query.toLowerCase()) || p.email.toLowerCase().startsWith(mention.query.toLowerCase())).slice(0, 6) : [];
+  const onType = (value: string, caret: number) => {
+    setText(value);
+    const m = /(^|\s)@([^\s@]{0,30})$/.exec(value.slice(0, caret));
+    setMention(m ? { start: caret - m[2].length - 1, query: m[2] } : null);
+    setHi(0);
+  };
+  const choose = (p: { id: string; name: string }) => {
+    if (!mention) return;
+    const caret = box.current?.selectionStart ?? text.length;
+    const next = text.slice(0, mention.start) + "@" + p.name + " " + text.slice(caret);
+    setText(next);
+    setPicked((x) => ({ ...x, [p.name]: p.id }));
+    setMention(null);
+    setTimeout(() => { const pos = mention.start + p.name.length + 2; box.current?.focus(); box.current?.setSelectionRange(pos, pos); }, 0);
+  };
+  const encode = (s: string) => {
+    let out = s;
+    for (const [name, id] of Object.entries(picked).sort((a, b) => b[0].length - a[0].length)) {
+      out = out.split("@" + name).join(`@[${name}](${id})`);
+    }
+    return out;
+  };
   const add = useMutation({
     mutationFn: (b: string) => api.addRecordComment(recordId, b),
-    onSuccess: () => { setText(""); qc.invalidateQueries({ queryKey: key }); },
+    onSuccess: () => { setText(""); setPicked({}); qc.invalidateQueries({ queryKey: key }); },
   });
   const del = useMutation({ mutationFn: api.deleteRecordComment, onSuccess: () => qc.invalidateQueries({ queryKey: key }) });
   const comments = q.data?.comments ?? [];
   useEffect(() => { list.current?.scrollTo({ top: list.current.scrollHeight }); }, [comments.length]);
-  const send = () => { if (text.trim() && !add.isPending) add.mutate(text.trim()); };
+  const send = () => { if (text.trim() && !add.isPending) add.mutate(encode(text.trim())); };
 
   return (
     <>
@@ -56,7 +86,7 @@ function Comments({ recordId, canComment }: { recordId: string; canComment: bool
             <span className="avatar sm">{initials(c.userName)}</span>
             <div className="act-body">
               <div className="act-meta"><b>{c.userName}</b><span>{timeAgo(c.createdAt)}</span></div>
-              <div className="act-text">{c.body}</div>
+              <div className="act-text"><CommentText body={c.body} /></div>
             </div>
             {c.userId === me?.id && (
               <button className="icon-btn danger act-del" title="Delete comment" onClick={() => del.mutate(c.id)}><Trash2 size={13} /></button>
@@ -66,12 +96,30 @@ function Comments({ recordId, canComment }: { recordId: string; canComment: bool
       </div>
       {canComment && (
         <div className="act-input">
+          {mention && matches.length > 0 && (
+            <div className="mention-menu" role="listbox">
+              {matches.map((p, i) => (
+                <button key={p.id} className={i === hi ? "on" : ""} onMouseDown={(e) => { e.preventDefault(); choose(p); }}>
+                  <span className="avatar sm">{initials(p.name)}</span> <b>{p.name}</b> <small>{p.email}</small>
+                </button>
+              ))}
+            </div>
+          )}
           <textarea
+            ref={box}
             rows={2}
-            placeholder="Add a comment…"
+            placeholder="Add a comment… type @ to mention someone"
             value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+            onChange={(e) => onType(e.target.value, e.target.selectionStart ?? e.target.value.length)}
+            onKeyDown={(e) => {
+              if (mention && matches.length) {
+                if (e.key === "ArrowDown") { e.preventDefault(); setHi((h) => (h + 1) % matches.length); return; }
+                if (e.key === "ArrowUp") { e.preventDefault(); setHi((h) => (h - 1 + matches.length) % matches.length); return; }
+                if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); choose(matches[hi]); return; }
+                if (e.key === "Escape") { setMention(null); return; }
+              }
+              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+            }}
           />
           <button className="act-send" disabled={!text.trim() || add.isPending} onClick={send} title="Send (Enter)"><Send size={14} /></button>
         </div>
@@ -124,4 +172,13 @@ function HistoryList({ recordId, fields }: { recordId: string; fields: Field[] }
       ))}
     </div>
   );
+}
+
+/** A comment, with @[Name](id) mentions shown as highlighted names. */
+function CommentText({ body }: { body: string }) {
+  const parts = body.split(/(@\[[^\]\n]{1,100}\]\(usr[A-Za-z0-9]{6,30}\))/g);
+  return <>{parts.map((p, i) => {
+    const m = /^@\[([^\]]+)\]\(usr[A-Za-z0-9]+\)$/.exec(p);
+    return m ? <span key={i} className="mention">@{m[1]}</span> : <span key={i}>{p}</span>;
+  })}</>;
 }

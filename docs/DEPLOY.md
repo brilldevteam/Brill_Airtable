@@ -186,6 +186,24 @@ Database changes are applied automatically when the app starts. The site is down
 
 From then on, sign-up confirmations, password resets, invites and automation emails reach real inboxes.
 
+## 9b. Install it as an app, and the mobile app
+
+Brill Tables is a **PWA** (installable web app). It ships a manifest, app icons and a service worker, so:
+
+- **Phone:** open https://airtable.brillcrew.com in Chrome (Android) → ⋮ → *Install app*, or in Safari (iPhone) → Share → *Add to Home Screen*. It opens full-screen with its own icon.
+- **Computer:** Chrome/Edge show an install icon in the address bar.
+- Data is never cached on the device — the app always shows live data and needs a connection.
+
+**Wrapping it in a store app (the “iframe” method).** The simplest, most reliable way is a WebView that opens the site *directly* (Capacitor, a Flutter/React Native WebView, or a PWA-to-store builder like PWABuilder). That needs no server change — sign-in works because the site is the page itself.
+
+If the wrapper instead loads the site **inside an iframe** of its own page, tell the server which origin frames it, in `.env.production`:
+
+```bash
+EMBED_ORIGINS=https://app.brillcrew.com
+```
+
+then `pm2 restart brill-tables --update-env`. The app's pages then allow that origin as a frame parent (and only it), and the sign-in cookie becomes `SameSite=None; Secure; Partitioned` so it works inside the frame. Note: iPhones block cookies in cross-site iframes more strictly, which is why the direct WebView is recommended.
+
 ## 10. Day-to-day
 
 | Task | Command |

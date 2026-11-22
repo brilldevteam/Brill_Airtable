@@ -55,3 +55,46 @@ describe("production server", () => {
     expect((await reg("friend@x.test")).statusCode).toBe(200);
   });
 });
+
+describe("installable app (PWA) and embedding", () => {
+  it("serves the manifest and service worker fresh, and can't be framed by default", async () => {
+    const web = mkdtempSync(join(tmpdir(), "brill-pwa-"));
+    writeFileSync(join(web, "index.html"), "<!doctype html><title>Brill</title>");
+    writeFileSync(join(web, "manifest.webmanifest"), JSON.stringify({ name: "Brill Tables" }));
+    writeFileSync(join(web, "sw.js"), "self.addEventListener('fetch', () => {})");
+    const d = await openDb("memory://");
+    const a = buildApp(d, { filesDir: mkdtempSync(join(tmpdir(), "brill-f-")), webDir: web });
+    await a.ready();
+    const m = await a.inject({ url: "/manifest.webmanifest" });
+    expect(m.headers["content-type"]).toBe("application/manifest+json");
+    expect(m.headers["cache-control"]).toBe("no-cache");
+    const sw = await a.inject({ url: "/sw.js" });
+    expect(sw.headers["content-type"]).toContain("javascript");
+    expect(sw.headers["cache-control"]).toBe("no-cache");
+    const home = await a.inject({ url: "/" });
+    expect(home.headers["content-security-policy"]).toContain("frame-ancestors 'none'");
+    expect(home.headers["x-frame-options"]).toBe("DENY");
+    await a.close();
+    await d.close();
+  });
+
+  it("EMBED_ORIGINS lets a mobile wrapper frame the app, with a cookie that works in the frame", async () => {
+    const web = mkdtempSync(join(tmpdir(), "brill-emb-"));
+    writeFileSync(join(web, "index.html"), "<!doctype html><title>Brill</title>");
+    const d = await openDb("memory://");
+    const a = buildApp(d, { filesDir: mkdtempSync(join(tmpdir(), "brill-f-")), webDir: web, embedOrigins: ["https://app.brillcrew.test"] });
+    await a.ready();
+    const home = await a.inject({ url: "/base/x" });
+    expect(home.headers["content-security-policy"]).toContain("frame-ancestors 'self' https://app.brillcrew.test");
+    expect(home.headers["x-frame-options"]).toBeUndefined();
+    // The API itself still can't be framed.
+    expect((await a.inject({ url: "/api/health" })).headers["x-frame-options"]).toBe("DENY");
+    const reg = await a.inject({ method: "POST", url: "/api/auth/register", payload: { email: "e@x.test", name: "E", password: "test-pass-2026" } });
+    const cookie = String(reg.headers["set-cookie"]);
+    expect(cookie).toMatch(/SameSite=None/i);
+    expect(cookie).toMatch(/Secure/);
+    expect(cookie).toMatch(/Partitioned/);
+    await a.close();
+    await d.close();
+  });
+});

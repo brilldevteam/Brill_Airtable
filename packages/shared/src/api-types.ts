@@ -8,7 +8,13 @@ export interface User {
   /** Has the user confirmed their email address? (Only sent for the signed-in user.) */
   emailVerified?: boolean;
 }
-export interface Base { id: string; workspaceId: string; name: string; color: string }
+export interface Base {
+  id: string; workspaceId: string; name: string; color: string;
+  /** Home page extras (per person): an icon name, starred, and when they last opened it. */
+  icon?: string | null; starred?: boolean; lastOpenedAt?: string | null;
+  /** File name of an uploaded logo, shown instead of the icon. */
+  logo?: string | null;
+}
 export type EditAccess = "all" | "team" | "creators";
 export interface Table {
   id: string;

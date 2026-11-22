@@ -98,7 +98,14 @@ export const fieldOptionsSchema = z
   .object({
     precision: z.number().int().min(0).max(8).optional(),
     choices: z.array(selectChoiceSchema).optional(),
+    /** single / multiple select: the option new records start with. */
+    defaultChoiceId: z.string().optional(),
+    /** person fields: tell people (in the app and by email) when they're added. */
+    notify: z.boolean().optional(),
     includeTime: z.boolean().optional(),
+    /** date / created / modified time: how dates are shown (stored values are always ISO). */
+    dateFormat: z.enum(["local", "friendly", "us", "european", "iso"]).optional(),
+    timeFormat: z.enum(["12", "24"]).optional(),
     /** link: the table linked to, and the matching field on the other side (absent for self-links). */
     linkedTableId: z.string().optional(),
     inverseFieldId: z.string().optional(),
@@ -209,11 +216,40 @@ function looseNumber(raw: unknown): number {
   return s === "" ? NaN : Number(s);
 }
 
-/** Local display of a stored date ("YYYY-MM-DD" or full ISO). */
-export function formatDateCell(s: string): string {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s + "T00:00:00").toLocaleDateString();
-  const d = new Date(s);
-  return Number.isNaN(d.getTime()) ? s : d.toLocaleString();
+export type DateFormat = "local" | "friendly" | "us" | "european" | "iso";
+export const DATE_FORMAT_LABELS: Record<DateFormat, string> = {
+  local: "Local (this computer’s setting)",
+  friendly: "Friendly — December 1, 2026",
+  us: "US — 12/01/2026",
+  european: "European — 01/12/2026",
+  iso: "ISO — 2026-12-01",
+};
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/**
+ * Display of a stored date ("YYYY-MM-DD" or full ISO) in the field's chosen format.
+ * Date-only values are read as calendar days, so time zones never shift them.
+ */
+export function formatDateCell(s: string, opts: { dateFormat?: DateFormat; timeFormat?: "12" | "24" } = {}): string {
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(s);
+  const d = new Date(dateOnly ? s + "T00:00:00" : s);
+  if (Number.isNaN(d.getTime())) return s;
+  const y = d.getFullYear(), m = d.getMonth(), day = d.getDate();
+  let date: string;
+  switch (opts.dateFormat ?? "local") {
+    case "friendly": date = `${MONTH_NAMES[m]} ${day}, ${y}`; break;
+    case "us": date = `${pad2(m + 1)}/${pad2(day)}/${y}`; break;
+    case "european": date = `${pad2(day)}/${pad2(m + 1)}/${y}`; break;
+    case "iso": date = `${y}-${pad2(m + 1)}-${pad2(day)}`; break;
+    default: date = d.toLocaleDateString();
+  }
+  if (dateOnly) return date;
+  let time: string;
+  if (opts.timeFormat === "24") time = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  else if (opts.timeFormat === "12") time = `${d.getHours() % 12 || 12}:${pad2(d.getMinutes())} ${d.getHours() < 12 ? "AM" : "PM"}`;
+  else time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return `${date} ${time}`;
 }
 
 /** Human-readable text for a stored value (used for type conversion, CSV export, search, cards). */
@@ -233,7 +269,7 @@ export function cellToText(field: Pick<Field, "type" | "options">, value: CellVa
       return (Array.isArray(value) ? value : []).map((id) => labels?.[id] || "file").join(", ");
     case "formula":
       if (field.options.resultType === "boolean") return value ? "✓" : "";
-      if (field.options.resultType === "date") return formatDateCell(String(value));
+      if (field.options.resultType === "date") return formatDateCell(String(value), field.options);
       if (typeof value === "number") return formatNumber(value, field.options.precision);
       return String(value);
     case "count":
@@ -253,7 +289,7 @@ export function cellToText(field: Pick<Field, "type" | "options">, value: CellVa
       return typeof value === "number" ? formatDuration(value, field.options.durationFormat) : String(value);
     case "createdTime":
     case "lastModifiedTime":
-      return formatDateCell(String(value));
+      return formatDateCell(String(value), field.options);
     case "user":
     case "createdBy":
     case "lastModifiedBy":

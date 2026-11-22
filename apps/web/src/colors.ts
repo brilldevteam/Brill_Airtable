@@ -9,6 +9,11 @@ export const BASE_COLORS: Record<string, string> = {
   gray: "linear-gradient(135deg, #a1a1aa, #52525b)",
 };
 
+/** A light wash of the base's colour, behind its table tabs. */
+export const BASE_TINTS: Record<string, string> = {
+  blue: "#eef4ff", teal: "#ecfdf5", purple: "#f5f3ff", orange: "#fff4ea", red: "#fff1f3", cyan: "#ecfeff", gray: "#f4f4f5",
+};
+
 /** Soft background + readable text pairs for select-option pills. */
 export const CHOICE_COLORS: Record<string, { bg: string; fg: string }> = {
   blue: { bg: "#dbeafe", fg: "#1e40af" },

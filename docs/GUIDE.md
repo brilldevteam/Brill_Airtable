@@ -37,7 +37,9 @@ The demo loader signs in as the local test account in `dev-seed.example.json` (o
 
 ## 4. Home and bases
 
-The home page lists every workspace you belong to and its bases. You can create a base, rename it, recolour it or delete it (the owner only). Inside a base, the tabs across the top are its tables: **+ Add table**, double-click a tab to rename it, right-click to delete.
+The home page has a sidebar: **Home**, **Starred**, **Shared with me**, **Workspaces**, **Import from Airtable** and **Create**. Home groups your bases by when *you* last opened them (Today, Past 7 days, Past 30 days, Earlier). Hover a base to ⭐ star it (starred bases also sit in the sidebar), or use ⋯ / right-click to rename it or pick an **icon and colour**. Switch between grid and list with the buttons on the right, and press **Ctrl+K** to jump to any base by name.
+
+Inside a base, the top bar shows the base name and four sections: **Data** (tables), **Automations**, **Dashboards** and **Forms** (every form in the base, with its share link). Under it, the tinted row holds the tables: **+ Add table**, double-click a tab to rename it, right-click for options. The ☰ button on the view toolbar shows or hides the list of views; click the view name to rename, duplicate or delete it. Dates can be shown as Friendly (December 1, 2026), US, European, ISO or Local — set it in the field's settings.
 
 ## 5. Fields (columns)
 
@@ -115,7 +117,16 @@ Select an attachment cell and press Enter to open the strip. **Add** offers **Lo
 
 - **Import CSV** (toolbar ⋯): match columns to fields or create new ones. The importer guesses types, handles day-first or month-first dates, ₹ signs and thousands separators, and yes/no checkboxes. It creates missing select options, and links records by name.
 - **Export CSV** downloads the current view, with its fields, filters and sort order. Values that a spreadsheet would treat as formulas are made safe.
-- **Batch API** — `POST /api/tables/:id/records/batch` with `typecast` creates many records at once. A future Airtable migration tool will use it.
+- **Batch API** — `POST /api/tables/:id/records/batch` with `typecast` creates many records at once.
+- **Import from Airtable** (home sidebar, or Create → Import bases from Airtable): create a personal access token at airtable.com/create/tokens with the scopes `schema.bases:read` and `data.records:read` and access to your bases, paste it, then pick the bases and a workspace. What comes across: tables, fields (types, options, select colours, date formats), records with their created dates, attachments (downloaded and stored here), links between tables, lookups, rollups, counts, formulas, and views (name, type, visible fields and order). A formula or rollup using something we can't recreate keeps the values Airtable showed, and the import lists it under “things to check”. Not copied: record comments, automations, interfaces, and view filters and sorts (Airtable's API doesn't share those). People in collaborator fields come across as names. The token is used only during the import and is never saved.
+
+## 9b. Notifications and @mentions
+
+- **Bell** (top right): shows when someone @mentions you in a record's comments, or adds you to a person field that notifies. Unread ones are highlighted; click one to open the record. The same notification is emailed to you (once).
+- **@mention**: in a record's comments, type `@` and pick a teammate or a client who has access to the base.
+- **Assignee-style fields**: in a Person field's settings, tick *Notify people when they're added*.
+- **Select options** (Status, etc.): Edit field shows each option as a coloured pill — rename it, click the dot to change its colour, drag to reorder, × to remove, *Add option*, *Alphabetize*, and a **default** for new records.
+- A field can be changed to or from **Attachment** or **Person**. Text can't become files or people, so those values are cleared (you're warned first); files and people turned into text keep their names.
 
 ## 10. Teamwork
 

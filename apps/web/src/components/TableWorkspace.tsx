@@ -5,6 +5,7 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { Menu } from "lucide-react";
 import { api, type FieldInput } from "../api";
 import { useDialogs } from "./Dialogs";
 import { FieldDialog } from "./FieldDialog";
@@ -93,9 +94,16 @@ export function TableWorkspace({ baseId, tableId, tables, role, guest }: {
 
   const [error, setError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<{ field?: Field } | null>(null);
-  const [openRecordId, setOpenRecordId] = useState<string | null>(null);
+  const [openRecordId, setOpenRecordId] = useState<string | null>(() => new URLSearchParams(window.location.search).get("record"));
+  useEffect(() => {
+    // A link like ?record=rec… opens that record once; drop it from the address afterwards.
+    const id = new URLSearchParams(window.location.search).get("record");
+    if (id) { setOpenRecordId(id); window.history.replaceState(null, "", window.location.pathname); }
+  }, [tableId]);
   const [search, setSearch] = useState("");
   const dialogs = useDialogs();
+  const [sidebarOpen, setSidebarOpen] = useState(() => { try { return localStorage.getItem("brill.viewSidebar") !== "closed"; } catch { return true; } });
+  const toggleSidebar = () => setSidebarOpen((o) => { try { localStorage.setItem("brill.viewSidebar", o ? "closed" : "open"); } catch { /* private mode */ } return !o; });
 
   // Keep the URL pointing at a real view.
   useEffect(() => {
@@ -345,32 +353,52 @@ export function TableWorkspace({ baseId, tableId, tables, role, guest }: {
     },
   };
   const openRecord = ctx.records.find((r) => r.id === openRecordId);
+  const createView = async (name: string, type: View["type"], copyFrom?: string) => {
+    try {
+      const { view: v } = await api.createView(tableId, name, type, copyFrom);
+      await qc.invalidateQueries({ queryKey: schemaKey });
+      nav(`/base/${baseId}/${tableId}/${v.id}`);
+    } catch (e) { setError((e as Error).message); }
+  };
+  const renameView = async (id: string, name: string) => {
+    try { await api.updateView(id, { name }); await qc.invalidateQueries({ queryKey: schemaKey }); }
+    catch (e) { setError((e as Error).message); }
+  };
+  const deleteView = async (id: string) => {
+    try { await api.deleteView(id); await qc.invalidateQueries({ queryKey: schemaKey }); nav(`/base/${baseId}/${tableId}`); }
+    catch (e) { setError((e as Error).message); }
+  };
+  const viewActions = {
+    rename: async () => {
+      const name = await dialogs.prompt({ title: "Rename view", label: "View name", defaultValue: view.name });
+      if (name) void renameView(view.id, name);
+    },
+    duplicate: () => void createView(`${view.name} copy`, view.type, view.id),
+    remove: views.length > 1 ? async () => {
+      const ok = await dialogs.confirm({ title: `Delete “${view.name}”?`, message: "Only the view is deleted — your records stay as they are.", confirmText: "Delete view", danger: true });
+      if (ok) void deleteView(view.id);
+    } : null,
+  };
 
   return (
     <div className="workspace">
-      <ViewSidebar
-        canEdit={canEdit}
-        views={views}
-        currentId={view.id}
-        onSelect={(id) => nav(`/base/${baseId}/${tableId}/${id}`)}
-        onCreate={async (name, type, copyFrom) => {
-          try {
-            const { view: v } = await api.createView(tableId, name, type, copyFrom);
-            await qc.invalidateQueries({ queryKey: schemaKey });
-            nav(`/base/${baseId}/${tableId}/${v.id}`);
-          } catch (e) { setError((e as Error).message); }
-        }}
-        onRename={async (id, name) => {
-          try { await api.updateView(id, { name }); await qc.invalidateQueries({ queryKey: schemaKey }); }
-          catch (e) { setError((e as Error).message); }
-        }}
-        onDelete={async (id) => {
-          try { await api.deleteView(id); await qc.invalidateQueries({ queryKey: schemaKey }); }
-          catch (e) { setError((e as Error).message); }
-        }}
-      />
+      {sidebarOpen && (
+        <ViewSidebar
+          canEdit={canEdit}
+          views={views}
+          currentId={view.id}
+          onSelect={(id) => nav(`/base/${baseId}/${tableId}/${id}`)}
+          onCreate={createView}
+          onRename={renameView}
+          onDelete={deleteView}
+        />
+      )}
       <div className="view-main">
-        {view.type !== "form" && <ViewToolbar ctx={ctx} recordCount={ctx.records.length} loading={recordsQ.isFetching} />}
+        {view.type !== "form" ? (
+          <ViewToolbar ctx={ctx} recordCount={ctx.records.length} loading={recordsQ.isFetching} sidebarOpen={sidebarOpen} onToggleSidebar={toggleSidebar} actions={viewActions} />
+        ) : !sidebarOpen && (
+          <div className="toolbar"><button className="icon-btn sidebar-toggle" title="Show the views list" onClick={toggleSidebar}><Menu size={17} /></button></div>
+        )}
         {error && <div className="error banner" onClick={() => setError(null)}>{error} (click to dismiss)</div>}
         {toast && (
           <div className="toast" role="status">

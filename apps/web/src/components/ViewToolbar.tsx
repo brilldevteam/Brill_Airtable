@@ -11,6 +11,7 @@ import {
   type FilterOperator,
   type SortSpec,
 } from "@brill/shared";
+import { ChevronDown, Copy, Menu, Pencil } from "lucide-react";
 import { ArrowDownUp, CalendarDays, Check, ListTree, Trash2, Globe, Image as ImageIcon, Maximize, Palette, Download, EyeOff, FileUp, Kanban, ListFilter, MoreHorizontal, Plus, Rows3, Search, X } from "lucide-react";
 import { api } from "../api";
 import { ImportCsvDialog } from "./ImportCsvDialog";
@@ -22,10 +23,16 @@ import type { ViewContext } from "./TableWorkspace";
 import { ViewIcon } from "./ViewSidebar";
 import { useCollaborators } from "./PeoplePicker";
 
-type Panel = "hide" | "filter" | "sort" | "group" | "height" | "stack" | "more" | "date" | "color" | "cover" | "size";
+type Panel = "hide" | "filter" | "sort" | "group" | "height" | "stack" | "more" | "date" | "color" | "cover" | "size" | "view";
+
+/** What the view name menu can do (rename, duplicate, delete). */
+export interface ViewActions { rename: () => void; duplicate: () => void; remove: (() => void) | null }
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
-export function ViewToolbar({ ctx, recordCount, loading }: { ctx: ViewContext; recordCount: number; loading: boolean }) {
+export function ViewToolbar({ ctx, recordCount, loading, sidebarOpen, onToggleSidebar, actions }: {
+  ctx: ViewContext; recordCount: number; loading: boolean; sidebarOpen: boolean; onToggleSidebar: () => void; actions: ViewActions;
+}) {
+  const [searching, setSearching] = useState(false);
   const [open, setOpen] = useState<{ panel: Panel; anchor: Anchor } | null>(null);
   const [importing, setImporting] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -64,8 +71,13 @@ export function ViewToolbar({ ctx, recordCount, loading }: { ctx: ViewContext; r
 
   return (
     <div className="toolbar">
-      <span className="view-title hide-sm"><ViewIcon type={view.type} /> {view.name}</span>
-      <span className="sep hide-sm" />
+      <button className={"icon-btn sidebar-toggle" + (sidebarOpen ? " on" : "")} title={sidebarOpen ? "Hide the views list" : "Show the views list"} onClick={onToggleSidebar}>
+        <Menu size={17} />
+      </button>
+      <button className="view-title-btn" onClick={toggle("view")} title={ctx.canEdit ? "View options" : view.name}>
+        <ViewIcon type={view.type} /> <span>{view.name}</span> {ctx.canEdit && <ChevronDown size={14} />}
+      </button>
+      <div className="spacer" />
       {view.type === "calendar" && (
         <>
           <button className={"tool" + (dateField ? "" : " warn")} title="Date field" onClick={toggle("date")}>
@@ -106,14 +118,21 @@ export function ViewToolbar({ ctx, recordCount, loading }: { ctx: ViewContext; r
       {view.type === "grid" && (
         <button className="tool" title="Row height" onClick={toggle("height")}><Rows3 size={15} /> <span className="tool-label">Row height</span></button>
       )}
-      <div className="spacer" />
-      <div className="search input-icon">
-        <Search size={14} />
-        <input placeholder="Search…" value={ctx.search} onChange={(e) => ctx.setSearch(e.target.value)} />
-      </div>
-      <span className="count">{loading ? "…" : plural(recordCount, "record")}</span>
-      {ctx.canDesign && <button className="btn sm hide-sm" onClick={() => ctx.editField()}><Plus size={14} /> Field</button>}
-      {ctx.canAddRecords && <button className="btn primary sm" onClick={() => ctx.addRecord()}><Plus size={14} /> Record</button>}
+      <button className="tool" title="Share this view with a link" onClick={() => setSharing(true)}>
+        <Globe size={15} /> <span className="tool-label">Share view</span>
+      </button>
+      {searching || ctx.search ? (
+        <div className="search input-icon">
+          <Search size={14} />
+          <input autoFocus placeholder="Find in view…" value={ctx.search} onChange={(e) => ctx.setSearch(e.target.value)}
+            onBlur={() => !ctx.search && setSearching(false)} onKeyDown={(e) => { if (e.key === "Escape") { ctx.setSearch(""); setSearching(false); } }} />
+          <button className="icon-btn" title="Close search" onMouseDown={(e) => e.preventDefault()} onClick={() => { ctx.setSearch(""); setSearching(false); }}><X size={13} /></button>
+        </div>
+      ) : (
+        <button className="icon-btn" title="Search this view" onClick={() => setSearching(true)}><Search size={16} /></button>
+      )}
+      {view.type !== "grid" && <span className="count hide-sm">{loading ? "…" : plural(recordCount, "record")}</span>}
+      {view.type !== "grid" && ctx.canAddRecords && <button className="btn primary sm" onClick={() => ctx.addRecord()}><Plus size={14} /> Record</button>}
       {ctx.guest && <span className="role-pill guest" title="You were invited to this base only">Guest · {ctx.canEdit ? "can edit" : ctx.canComment ? "can comment" : "read only"}</span>}
       {!ctx.canEdit && !ctx.guest && <span className="role-pill">{ctx.canComment ? "Can comment" : "Read only"}</span>}
       <button className="icon-btn" title="More" onClick={toggle("more")} style={{ marginLeft: 2 }}><MoreHorizontal size={17} /></button>
@@ -126,6 +145,13 @@ export function ViewToolbar({ ctx, recordCount, loading }: { ctx: ViewContext; r
 
       {open && (
         <Popover anchor={open.anchor} onClose={() => setOpen(null)} minWidth={open.panel === "filter" ? 560 : open.panel === "height" ? 180 : open.panel === "more" ? 240 : 300}>
+          {open.panel === "view" && (
+            <div className="menu">
+              <button onClick={() => { setOpen(null); actions.rename(); }}><Pencil size={15} /> Rename view</button>
+              <button onClick={() => { setOpen(null); actions.duplicate(); }}><Copy size={15} /> Duplicate view</button>
+              {actions.remove && <><hr /><button className="danger" onClick={() => { setOpen(null); actions.remove!(); }}><Trash2 size={15} /> Delete view</button></>}
+            </div>
+          )}
           {open.panel === "hide" && <HideFields ctx={ctx} />}
           {open.panel === "filter" && <FilterEditor ctx={ctx} />}
           {open.panel === "sort" && <SortEditor ctx={ctx} />}
@@ -142,8 +168,8 @@ export function ViewToolbar({ ctx, recordCount, loading }: { ctx: ViewContext; r
           )}
           {open.panel === "more" && (
             <div className="menu">
+              {ctx.canDesign && <button onClick={() => { setOpen(null); ctx.editField(); }}><Plus size={15} /> Add a field…</button>}
               {ctx.canAddRecords && <button onClick={() => { setOpen(null); setImporting(true); }}><FileUp size={15} /> Import CSV…</button>}
-              <button onClick={() => { setOpen(null); setSharing(true); }}><Globe size={15} /> Share view (public link)…</button>
               {ctx.canEdit && <button onClick={() => { setOpen(null); ctx.openTrash(); }}><Trash2 size={15} /> Trash (deleted records)…</button>}
               {ctx.canEdit && <div className="menu-label menu-tip">Undo: Ctrl+Z · Redo: Ctrl+Shift+Z</div>}
               <button onClick={() => { setOpen(null); window.location.href = api.exportCsvUrl(view.id); }}>

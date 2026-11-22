@@ -283,6 +283,35 @@ const MIGRATIONS: string[] = [
   /* 015 a dashboard can belong to one table (it goes when the table does) */ `
   ALTER TABLE dashboards ADD COLUMN table_id TEXT REFERENCES tables(id) ON DELETE CASCADE
   `,
+  /* 016 home page: each person's starred bases and when they last opened them; a base icon */ `
+  CREATE TABLE base_prefs (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    base_id TEXT NOT NULL REFERENCES bases(id) ON DELETE CASCADE,
+    starred BOOLEAN NOT NULL DEFAULT false,
+    last_opened_at TIMESTAMPTZ,
+    PRIMARY KEY (user_id, base_id)
+  );
+  ALTER TABLE bases ADD COLUMN icon TEXT
+  `,
+  /* 017 a base can show an uploaded logo (a client's) */ `
+  ALTER TABLE bases ADD COLUMN logo TEXT
+  `,
+  /* 018 notifications: mentions and assignments, shown in the bell and emailed */ `
+  CREATE TABLE notifications (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    base_id TEXT NOT NULL REFERENCES bases(id) ON DELETE CASCADE,
+    table_id TEXT NOT NULL REFERENCES tables(id) ON DELETE CASCADE,
+    record_id TEXT NOT NULL,
+    actor_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    data JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    read_at TIMESTAMPTZ,
+    emailed_at TIMESTAMPTZ
+  );
+  CREATE INDEX notifications_user_idx ON notifications (user_id, created_at DESC)
+  `,
 ];
 
 async function migrate(db: Db) {

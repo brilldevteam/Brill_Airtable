@@ -16,6 +16,11 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } },
 });
 
+// Installable app (PWA): the service worker only runs in the built app, never in dev.
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js").catch(() => undefined); });
+}
+
 window.addEventListener("brill:signed-out", () => {
   void queryClient.invalidateQueries({ queryKey: ["me"] });
 });

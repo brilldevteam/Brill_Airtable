@@ -16,7 +16,7 @@ import { requireUser } from "./auth";
 import type { Db } from "./db";
 import { HttpError } from "./errors";
 import { computeAllForRecord, Schema, writeCells } from "./links";
-import { displayData, loadFields, prepareCells, toRecord } from "./routes";
+import { displayData, givenKeys, loadFields, prepareCells, toRecord } from "./routes";
 import { buildViewQuery } from "./viewQuery";
 
 /**
@@ -207,8 +207,8 @@ export function registerImportExport(app: FastifyInstance, db: Db) {
           const input = body.typecast
             ? await typecastCells(t, tableId, fields, r.cells, { dateOrder: body.dateOrder, userId: user.id })
             : r.cells;
-          const cells = await prepareCells(t, tableId, input);
-          await checkFieldEdits(t, access, tableId, Object.keys(cells));
+          const cells = await prepareCells(t, tableId, input, { create: true });
+          await checkFieldEdits(t, access, tableId, givenKeys(cells));
           const id = newId("rec");
           await t.query(`INSERT INTO records (id, table_id, cells, created_by, updated_by) VALUES ($1,$2,'{}',$3,$3)`, [id, tableId, user.id]);
           await writeCells(t, schema, user.id, tableId, id, cells, "create");

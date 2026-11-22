@@ -1,5 +1,7 @@
 import {
   COMPUTED_TYPES,
+  DATE_FORMAT_LABELS,
+  type DateFormat,
   compileFormula,
   formulaToDisplay,
   FIELD_TYPE_LABELS,
@@ -14,6 +16,7 @@ import {
   type EditAccess,
 } from "@brill/shared";
 import { useQuery } from "@tanstack/react-query";
+import { ChoiceEditor, newDraft, type ChoiceDraft } from "./ChoiceEditor";
 import { useState, type FormEvent } from "react";
 import { api, type FieldInput } from "../api";
 import { FormulaEditor } from "./FormulaEditor";
@@ -68,7 +71,13 @@ export function FieldDialog({ field, isPrimary, tableId, tables, tableFields, on
   const [durationFormat, setDurationFormat] = useState<"h:mm" | "h:mm:ss">(o.durationFormat ?? "h:mm");
   const [multiplePeople, setMultiplePeople] = useState(o.multiple ?? false);
   const [includeTime, setIncludeTime] = useState(o.includeTime ?? false);
-  const [choicesText, setChoicesText] = useState((o.choices ?? []).map((c) => c.name).join("\n"));
+  const [dateFormat, setDateFormat] = useState<DateFormat>(o.dateFormat ?? "local");
+  const [timeFormat, setTimeFormat] = useState<"" | "12" | "24">(o.timeFormat ?? "");
+  const [choices, setChoices] = useState<ChoiceDraft[]>(() =>
+    (o.choices ?? []).map((c): ChoiceDraft => ({ key: c.id, id: c.id, name: c.name, color: c.color }))
+      .concat(o.choices?.length ? [] : [newDraft("")]));
+  const [defaultKey, setDefaultKey] = useState<string | null>(o.defaultChoiceId ?? null);
+  const [notify, setNotify] = useState(o.notify ?? false);
   const [linkedTableId, setLinkedTableId] = useState(o.linkedTableId ?? tables.find((t) => t.id !== tableId)?.id ?? tableId);
   const linkFields = tableFields.filter((f) => f.type === "link");
   const [linkFieldId, setLinkFieldId] = useState(o.linkFieldId ?? linkFields[0]?.id ?? "");
@@ -79,7 +88,9 @@ export function FieldDialog({ field, isPrimary, tableId, tables, tableFields, on
   const [busy, setBusy] = useState(false);
 
   const isSelect = type === "singleSelect" || type === "multipleSelect";
-  const editingStructural = !!field && STRUCTURAL_TYPES.has(field.type);
+  const editingStructural = !!field && STRUCTURAL_TYPES.has(field.type) && field.type !== "attachment" && field.type !== "user";
+  // Turning a field into files or people can't keep its values; files/people into text keep their names.
+  const clearsValues = !!field && field.type !== type && (type === "attachment" || type === "user");
   const typeChanged = field && field.type !== type;
   const needsLink = type === "lookup" || type === "rollup" || type === "count";
   // A formula's result type decides whether decimal places apply.
@@ -100,8 +111,10 @@ export function FieldDialog({ field, isPrimary, tableId, tables, tableFields, on
 
   const allowedTypes = FIELD_TYPES.filter((t) => {
     if (isPrimary) return PRIMARY_TYPES.has(t);
+    const swappable = (x: FieldType) => x === "attachment" || x === "user" || !STRUCTURAL_TYPES.has(x);
+    if (field && (field.type === "attachment" || field.type === "user")) return swappable(t);
     if (editingStructural) return t === field!.type; // can't convert these yet
-    if (field && STRUCTURAL_TYPES.has(t)) return false; // can't convert into them either
+    if (field && STRUCTURAL_TYPES.has(t)) return t === "attachment" || t === "user"; // only these can be converted into
     return true;
   });
 
@@ -116,19 +129,21 @@ export function FieldDialog({ field, isPrimary, tableId, tables, tableFields, on
     }
     if (type === "rating") options.max = maxStars;
     if (type === "duration") options.durationFormat = durationFormat;
-    if (type === "user") options.multiple = multiplePeople;
+    if (type === "user") { options.multiple = multiplePeople; options.notify = notify; }
     if (type === "date") options.includeTime = includeTime;
+    if (type === "date" || type === "createdTime" || type === "lastModifiedTime") {
+      if (dateFormat !== "local") options.dateFormat = dateFormat;
+      if (timeFormat) options.timeFormat = timeFormat;
+    }
     if (isSelect) {
       // Keep existing choice ids (and colours) for names that didn't change.
       const existing = field?.options.choices ?? [];
-      options.choices = choicesText
-        .split("\n")
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .map((n) => {
-          const old = existing.find((c) => c.name === n);
-          return old ? { id: old.id, name: n, color: old.color } : { name: n };
-        });
+      void existing;
+      const named = choices.map((c) => ({ ...c, name: c.name.trim() })).filter((c) => c.name);
+      const names = named.map((c) => c.name);
+      if (new Set(names).size !== names.length) return setError("Two options have the same name.");
+      options.choices = named.map((c) => (c.id ? { id: c.id, name: c.name, color: c.color } : { name: c.name, color: c.color }));
+      options.defaultChoice = named.find((c) => c.key === defaultKey)?.name ?? null;
     }
     if (type === "link" && !field) options.linkedTableId = linkedTableId;
     if (needsLink) {
@@ -246,16 +261,37 @@ export function FieldDialog({ field, isPrimary, tableId, tables, tableFields, on
             </select>
           </label>
         )}
+        {(type === "date" || type === "createdTime" || type === "lastModifiedTime") && (
+          <label>
+            Date format
+            <select value={dateFormat} onChange={(e) => setDateFormat(e.target.value as DateFormat)}>
+              {(Object.keys(DATE_FORMAT_LABELS) as DateFormat[]).map((k) => <option key={k} value={k}>{DATE_FORMAT_LABELS[k]}</option>)}
+            </select>
+          </label>
+        )}
         {type === "date" && (
           <label className="row">
             <input type="checkbox" checked={includeTime} onChange={(e) => setIncludeTime(e.target.checked)} /> Include time
           </label>
         )}
-        {isSelect && (
+        {((type === "date" && includeTime) || type === "createdTime" || type === "lastModifiedTime") && (
           <label>
-            Options (one per line)
-            <textarea rows={6} value={choicesText} onChange={(e) => setChoicesText(e.target.value)} placeholder={"Todo\nIn progress\nDone"} />
+            Time format
+            <select value={timeFormat} onChange={(e) => setTimeFormat(e.target.value as "" | "12" | "24")}>
+              <option value="">Local (this computer’s setting)</option>
+              <option value="12">12-hour — 2:30 PM</option>
+              <option value="24">24-hour — 14:30</option>
+            </select>
           </label>
+        )}
+        {isSelect && <ChoiceEditor choices={choices} onChange={setChoices} defaultKey={defaultKey} onDefault={setDefaultKey} />}
+        {type === "user" && (
+          <label className="row">
+            <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} /> Notify people when they're added (in the app and by email)
+          </label>
+        )}
+        {clearsValues && (
+          <div className="field-warn">The values already in this field will be cleared — text can't be turned into {type === "user" ? "people" : "files"}.</div>
         )}
 
         {type === "link" && (

@@ -83,7 +83,7 @@ export function KanbanView({ ctx }: { ctx: ViewContext }) {
                     const v = r.cells[f.id] ?? null;
                     if (v === null) return null; // keep cards compact: skip empty fields
                     if (f.type === "attachment") return null; // shown as the cover
-                    const text = f.type === "date" ? formatDateCell(String(v)) : f.type === "checkbox" ? "Yes" : cellToText(f, v, ctx.labels);
+                    const text = f.type === "date" ? formatDateCell(String(v), f.options) : f.type === "checkbox" ? "Yes" : cellToText(f, v, ctx.labels);
                     return (
                       <div key={f.id} className="card-field">
                         <div className="card-label">{f.name}</div>

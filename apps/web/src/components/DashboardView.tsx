@@ -176,7 +176,7 @@ function WidgetBody({ widget, data, loading }: { widget: Widget; data: WidgetDat
                       </td>
                     );
                   }
-                  const text = f.type === "checkbox" ? (v ? "✓" : "") : f.type === "date" && v ? formatDateCell(String(v)) : cellToText(f, v, data.labels);
+                  const text = f.type === "checkbox" ? (v ? "✓" : "") : f.type === "date" && v ? formatDateCell(String(v), f.options) : cellToText(f, v, data.labels);
                   return <td key={f.id} className={isNumericField(f) ? "num" : ""}>{text}</td>;
                 })}
               </tr>

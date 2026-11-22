@@ -5,6 +5,7 @@ import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { AccountDialog } from "./AccountDialog";
+import { NotificationsBell } from "./NotificationsBell";
 import { Popover, anchorOf, type Anchor } from "./Popover";
 
 export function initials(name: string) {
@@ -21,7 +22,7 @@ export function LogoMark({ size = 30 }: { size?: number }) {
 }
 
 /** Top bar shared by every signed-in page: logo, page-specific content, user menu. */
-export function AppBar({ children }: { children?: ReactNode }) {
+export function AppBar({ children, compact = false }: { children?: ReactNode; compact?: boolean }) {
   const me = useQuery({ queryKey: ["me"], queryFn: api.me });
   const user = me.data?.user as User | undefined;
   const qc = useQueryClient();
@@ -29,13 +30,14 @@ export function AppBar({ children }: { children?: ReactNode }) {
   const [account, setAccount] = useState(false);
 
   return (
-    <header className="appbar">
+    <header className={"appbar" + (compact ? " compact" : "")}>
       <Link to="/" className="logo" title="All bases">
-        <LogoMark />
+        <LogoMark size={compact ? 28 : 30} />
         {!children && <span>Brill Tables</span>}
       </Link>
       {children}
       {!children && <div className="spacer" />}
+      {user && <NotificationsBell />}
       {user && (
         <button className="avatar" title={user.name} onClick={(e) => setMenu(anchorOf(e.currentTarget))}>
           {initials(user.name)}

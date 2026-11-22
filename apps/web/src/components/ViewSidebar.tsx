@@ -37,6 +37,7 @@ export function ViewSidebar({ canEdit, views, currentId, onSelect, onCreate, onR
   const dialogs = useDialogs();
   const [menu, setMenu] = useState<{ view: View; anchor: Anchor } | null>(null);
   const [find, setFind] = useState("");
+  const [creating, setCreating] = useState<Anchor | null>(null);
   const shown = views.filter((v) => v.name.toLowerCase().includes(find.trim().toLowerCase()));
 
   const create = async (type: ViewType) => {
@@ -66,11 +67,15 @@ export function ViewSidebar({ canEdit, views, currentId, onSelect, onCreate, onR
 
   return (
     <aside className="view-sidebar">
+      {canEdit && (
+        <button className="vs-create" onClick={(e) => setCreating(anchorOf(e.currentTarget))}>
+          <Plus size={16} /> Create new…
+        </button>
+      )}
       <div className="view-find input-icon">
         <Search size={14} />
         <input placeholder="Find a view" value={find} onChange={(e) => setFind(e.target.value)} />
       </div>
-      <div className="sidebar-label">Views</div>
       <div className="view-list">
         {shown.map((v) => (
           <div key={v.id} className={"view-item" + (v.id === currentId ? " active" : "")}>
@@ -86,22 +91,19 @@ export function ViewSidebar({ canEdit, views, currentId, onSelect, onCreate, onR
         {shown.length === 0 && <div className="panel-empty" style={{ padding: "4px 8px" }}>No views match.</div>}
       </div>
 
-      {canEdit && <div className="view-create">
-        <div className="sidebar-label">Create a view</div>
-        <div className="vc-list">
-          {(["grid", "kanban", "calendar", "gallery", "form"] as ViewType[]).map((t) => (
-            <button key={t} className={"vc-btn vc-" + t} onClick={() => create(t)} title={`New ${VIEW_LABEL[t].toLowerCase()} view`}>
-              <span className="vc-chip"><ViewIcon type={t} size={15} /></span>
-              <span className="vc-text">
-                <b>{VIEW_LABEL[t]}</b>
-                <small>{VIEW_HINT[t]}</small>
-              </span>
-              <span className="vc-plus"><Plus size={14} /></span>
-            </button>
-          ))}
-        </div>
-      </div>}
-
+      {creating && (
+        <Popover anchor={creating} onClose={() => setCreating(null)} minWidth={240}>
+          <div className="menu vs-create-menu">
+            <div className="menu-label">Create a view</div>
+            {(["grid", "kanban", "calendar", "gallery", "form"] as ViewType[]).map((t) => (
+              <button key={t} onClick={() => { setCreating(null); void create(t); }}>
+                <ViewIcon type={t} size={16} />
+                <span className="vc-text"><b>{VIEW_LABEL[t]}</b><small>{VIEW_HINT[t]}</small></span>
+              </button>
+            ))}
+          </div>
+        </Popover>
+      )}
       {menu && (
         <Popover anchor={menu.anchor} onClose={() => setMenu(null)} minWidth={190}>
           <div className="menu">

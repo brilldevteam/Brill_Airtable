@@ -11,7 +11,7 @@ import {
   type Item,
 } from "@glideapps/glide-data-grid";
 import {
-  cellToText, COMPUTED_TYPES, FIELD_TYPE_LABELS, fillSeries, groupKey, isNumericField, orderedFieldIds, summarize, SUMMARY_LABELS, summaryKindsFor,
+  cellToText, COMPUTED_TYPES, FIELD_TYPE_LABELS, fillSeries, formatDateCell, groupKey, isNumericField, orderedFieldIds, summarize, SUMMARY_LABELS, summaryKindsFor,
   type CellValue, type Field, type LinkLabels, type RecordRow, type SummaryKind,
 } from "@brill/shared";
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
@@ -296,7 +296,7 @@ export function GridView({ ctx }: { ctx: ViewContext }) {
           return { kind: GridCellKind.Bubble, data: cellToText(f, v).split(", ").filter(Boolean), allowOverlay: false };
         case "date": {
           const s = typeof v === "string" ? v : "";
-          const display = !s ? "" : f.options.includeTime ? new Date(s).toLocaleString() : new Date(s + "T00:00:00").toLocaleDateString();
+          const display = s ? formatDateCell(s, f.options) : "";
           return { kind: GridCellKind.Text, data: s, displayData: display, allowOverlay: true };
         }
         case "url":
@@ -460,6 +460,15 @@ export function GridView({ ctx }: { ctx: ViewContext }) {
           onPaste={true}
           fillHandle={true}
           onFillPattern={onFillPattern}
+          onKeyDown={(e) => {
+            // Delete / Backspace clears the selection on the first press, from our own (always current) selection.
+            if ((e.key === "Delete" || e.key === "Backspace") && !e.ctrlKey && !e.metaKey && !e.altKey && (selection.current || selection.rows.length)) {
+              e.cancel();
+              e.preventDefault();
+              e.stopPropagation();
+              onDelete(selection);
+            }
+          }}
           onCellContextMenu={onCellContextMenu}
           rowSelectionMode="multi"
           rowMarkers={grouped ? "checkbox" : "both"}

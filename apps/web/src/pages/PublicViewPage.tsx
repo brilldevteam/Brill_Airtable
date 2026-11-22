@@ -128,7 +128,7 @@ function Cell({ field, value, data, big }: { field: Field; value: CellValue; dat
     case "checkbox":
       return <span className="pv-check">✓</span>;
     case "date":
-      return <>{formatDateCell(String(value))}</>;
+      return <>{formatDateCell(String(value), field.options)}</>;
     case "url":
       return <a href={String(value)} target="_blank" rel="noreferrer noopener" onClick={(e) => e.stopPropagation()}>{String(value)}</a>;
     case "attachment":
