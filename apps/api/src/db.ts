@@ -280,6 +280,9 @@ const MIGRATIONS: string[] = [
   ALTER TABLE email_tokens ADD CONSTRAINT email_tokens_kind_check CHECK (kind IN ('verify','reset','email'));
   ALTER TABLE email_tokens ADD COLUMN new_email TEXT
   `,
+  /* 015 a dashboard can belong to one table (it goes when the table does) */ `
+  ALTER TABLE dashboards ADD COLUMN table_id TEXT REFERENCES tables(id) ON DELETE CASCADE
+  `,
 ];
 
 async function migrate(db: Db) {

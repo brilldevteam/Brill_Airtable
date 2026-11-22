@@ -1309,3 +1309,12 @@ a.btn { text-decoration: none; }
 .modal::-webkit-scrollbar-track { background: transparent; }
 .modal::-webkit-scrollbar-thumb { background: #c9ccd6; border-radius: 6px; }
 .modal::-webkit-scrollbar-thumb:hover { background: #a9adbb; }
+
+/* Dashboards per table */
+.dash-empty-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.dash-table { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 500; background: var(--accent-soft); color: var(--accent); padding: 2px 9px; border-radius: 999px; }
+.check-row { display: flex !important; flex-direction: row !important; gap: 9px; align-items: flex-start; font-weight: 400; font-size: 13px; line-height: 1.45; }
+.check-row input { margin-top: 2px; flex-shrink: 0; width: auto; }
+.widget-list td.att-cell { white-space: nowrap; }
+.list-thumb { display: inline-grid; place-items: center; width: 30px; height: 30px; margin-right: 4px; border-radius: 6px; overflow: hidden; background: var(--accent-soft); color: var(--accent); vertical-align: middle; border: 1px solid var(--border); }
+.list-thumb img { width: 100%; height: 100%; object-fit: cover; }

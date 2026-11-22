@@ -135,4 +135,33 @@ describe("dashboards", () => {
     expect((await call("PATCH", `/api/dashboards/${dashId}`, { name: "Mine" }, viv)).code).toBe(403);
     expect((await call("DELETE", `/api/dashboards/${dashId}`)).code).toBe(200);
   });
+
+  it("makes a ready-made dashboard for one table, with the newest records first", async () => {
+    const r = await call("POST", `/api/bases/${baseId}/dashboards`, { name: "Sales", tableId, starter: true });
+    expect(r.code).toBe(200);
+    const d = r.body.dashboard;
+    expect(d.tableId).toBe(tableId);
+    expect(d.widgets.map((w: any) => w.type)).toEqual(["number", "number", "chart", "chart", "list"]);
+    expect(d.widgets[1].metric).toEqual({ kind: "sum", fieldId: F.Amount.id });
+    expect(d.widgets[2].groupFieldId).toBe(F.Status.id);
+    expect(d.widgets[3].groupFieldId).toBe(F.Due.id);
+    const listW = d.widgets[4];
+    expect(listW.order).toBe("newest");
+    await call("POST", `/api/tables/${tableId}/records`, { cells: { Name: "Newest" } });
+    const total = (await call("GET", `/api/views/${viewId}/records`)).body.records.length;
+    const data = (await call("GET", `/api/dashboards/${d.id}/data`)).body.data;
+    expect(data[d.widgets[0].id].value).toBe(total);
+    expect(data[listW.id].records[0].cells[F.Name.id]).toBe("Newest");
+    expect(data[listW.id].files).toEqual({});
+
+    // Only tables of this base; deleting the table takes its dashboard with it.
+    expect((await call("POST", `/api/bases/${baseId}/dashboards`, { name: "X", tableId: "tblNope" })).code).toBe(400);
+    const t2 = (await call("POST", `/api/bases/${baseId}/tables`, { name: "Temp" })).body.table;
+    const d2 = (await call("POST", `/api/bases/${baseId}/dashboards`, { name: "Temp", tableId: t2.id, starter: true })).body.dashboard;
+    expect(d2.widgets.length).toBeGreaterThan(0);
+    await call("DELETE", `/api/tables/${t2.id}`);
+    const left = (await call("GET", `/api/bases/${baseId}/dashboards`)).body.dashboards.map((x: any) => x.id);
+    expect(left).not.toContain(d2.id);
+    expect(left).toContain(d.id);
+  });
 });

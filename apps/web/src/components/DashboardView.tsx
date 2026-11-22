@@ -4,7 +4,7 @@ import {
 } from "@brill/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  AlignLeft, ArrowLeft, ArrowRight, BarChart3, ChartColumn, ChartLine, ChartPie, Hash, LayoutDashboard, List, Maximize2, Minimize2, Pencil, Plus, Settings2, Trash2, X,
+  AlignLeft, ArrowLeft, ArrowRight, BarChart3, FileText, Film, Sheet, ChartColumn, ChartLine, ChartPie, Hash, LayoutDashboard, List, Maximize2, Minimize2, Pencil, Plus, Settings2, Trash2, X,
 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../api";
@@ -25,6 +25,7 @@ export function DashboardView({ dashboard, tables, canDesign }: { dashboard: Das
   const [dialog, setDialog] = useState<{ widget?: Widget } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const widgets = dashboard.widgets;
+  const otherTable = (w: Widget) => w.type !== "text" && w.tableId !== dashboard.tableId;
 
   const save = async (next: Widget[]) => {
     setError(null);
@@ -59,6 +60,7 @@ export function DashboardView({ dashboard, tables, canDesign }: { dashboard: Das
     <div className="dash">
       <div className="dash-bar">
         <h2>{dashboard.name}</h2>
+        {dashboard.tableId && tables.find((t) => t.id === dashboard.tableId)?.name !== dashboard.name && <span className="dash-table"><Sheet size={13} /> {tables.find((t) => t.id === dashboard.tableId)?.name ?? "Table"}</span>}
         <span className="muted small">{data.isFetching ? "Updating…" : "Live — updates as records change"}</span>
         <div className="spacer" />
         {canDesign && (
@@ -87,7 +89,7 @@ export function DashboardView({ dashboard, tables, canDesign }: { dashboard: Das
             <section key={w.id} className={`widget w-${w.type}`} style={{ gridColumn: `span ${w.width}` }}>
               <header className="widget-head">
                 <h3>{w.title || defaultTitle(w, tables)}</h3>
-                {w.type !== "text" && <span className="widget-src">{sourceLabel(w, tables)}</span>}
+                {otherTable(w) && <span className="widget-src">{sourceLabel(w, tables)}</span>}
                 {editing && (
                   <div className="widget-tools">
                     <button className="icon-btn" title="Move left" disabled={i === 0} onClick={() => move(i, -1)}><ArrowLeft size={14} /></button>
@@ -109,6 +111,7 @@ export function DashboardView({ dashboard, tables, canDesign }: { dashboard: Das
         <WidgetDialog
           widget={dialog.widget}
           tables={tables}
+          defaultTableId={dashboard.tableId}
           onClose={() => setDialog(null)}
           onSave={(w) => {
             setDialog(null);
@@ -155,7 +158,25 @@ function WidgetBody({ widget, data, loading }: { widget: Widget; data: WidgetDat
               <tr key={r.id}>
                 {fields.map((f) => {
                   const v = (r.cells[f.id] ?? null) as Parameters<typeof cellToText>[1];
-                  const text = f.type === "checkbox" ? (v ? "✓" : "") : f.type === "attachment" ? `${(v as string[] | null)?.length ?? 0} files` : f.type === "date" && v ? formatDateCell(String(v)) : cellToText(f, v, data.labels);
+                  if (f.type === "attachment") {
+                    const ids = (v as string[] | null) ?? [];
+                    return (
+                      <td key={f.id} className="att-cell">
+                        {ids.slice(0, 4).map((id) => {
+                          const a = data.files[id];
+                          if (!a) return null;
+                          const Icon = a.mime.startsWith("video/") ? Film : FileText;
+                          return (
+                            <a key={id} href={a.url} target="_blank" rel="noreferrer" title={a.filename} className="list-thumb">
+                              {a.thumbUrl ? <img src={a.thumbUrl} alt="" /> : <Icon size={14} />}
+                            </a>
+                          );
+                        })}
+                        {ids.length > 4 && <span className="muted small">+{ids.length - 4}</span>}
+                      </td>
+                    );
+                  }
+                  const text = f.type === "checkbox" ? (v ? "✓" : "") : f.type === "date" && v ? formatDateCell(String(v)) : cellToText(f, v, data.labels);
                   return <td key={f.id} className={isNumericField(f) ? "num" : ""}>{text}</td>;
                 })}
               </tr>
@@ -183,13 +204,13 @@ function WidgetBody({ widget, data, loading }: { widget: Widget; data: WidgetDat
 }
 
 /** Add or change a widget. */
-function WidgetDialog({ widget, tables, onSave, onClose }: {
-  widget?: Widget; tables: Table[]; onSave: (w: Widget) => void; onClose: () => void;
+function WidgetDialog({ widget, tables, defaultTableId, onSave, onClose }: {
+  widget?: Widget; tables: Table[]; defaultTableId: string | null; onSave: (w: Widget) => void; onClose: () => void;
 }) {
   const [type, setType] = useState<WidgetType>(widget?.type ?? "number");
   const [title, setTitle] = useState(widget?.title ?? "");
   const [width, setWidth] = useState(widget?.width ?? 1);
-  const [tableId, setTableId] = useState(widget && widget.type !== "text" ? widget.tableId : tables[0]?.id ?? "");
+  const [tableId, setTableId] = useState(widget && widget.type !== "text" ? widget.tableId : defaultTableId ?? tables[0]?.id ?? "");
   const [viewId, setViewId] = useState<string | null>(widget && widget.type !== "text" ? widget.viewId : null);
   const [metric, setMetric] = useState<Metric>(widget && (widget.type === "number" || widget.type === "chart") ? widget.metric : { kind: "count", fieldId: null });
   const [chartType, setChartType] = useState<ChartType>(widget?.type === "chart" ? widget.chartType : "bar");
@@ -197,6 +218,7 @@ function WidgetDialog({ widget, tables, onSave, onClose }: {
   const [dateBucket, setDateBucket] = useState<"day" | "week" | "month">(widget?.type === "chart" ? widget.dateBucket : "month");
   const [limit, setLimit] = useState(widget?.type === "chart" || widget?.type === "list" ? widget.limit : 8);
   const [fieldIds, setFieldIds] = useState<string[]>(widget?.type === "list" ? widget.fieldIds : []);
+  const [order, setOrder] = useState<"view" | "newest">(widget?.type === "list" ? widget.order : "newest");
   const [text, setText] = useState(widget?.type === "text" ? widget.text : "");
   const schema = useQuery({ queryKey: ["table", tableId], queryFn: () => api.table(tableId), enabled: !!tableId });
   const fields = schema.data?.fields ?? [];
@@ -233,7 +255,7 @@ function WidgetDialog({ widget, tables, onSave, onClose }: {
     if (type === "text") return onSave({ ...base, type, text });
     const src = { tableId, viewId };
     if (type === "number") return onSave({ ...base, ...src, type, metric });
-    if (type === "list") return onSave({ ...base, ...src, type, fieldIds, limit });
+    if (type === "list") return onSave({ ...base, ...src, type, fieldIds, limit, order });
     onSave({ ...base, ...src, type, chartType, groupFieldId, dateBucket, metric, limit });
   };
 
@@ -333,7 +355,7 @@ function WidgetDialog({ widget, tables, onSave, onClose }: {
 
             {type === "list" && (
               <>
-                <label>Fields to show <span className="field-hint">(up to 8 — none ticked shows the first 4)</span></label>
+                <label>Fields to show <span className="field-hint">(up to 8 — none ticked: the name, files and the next few fields, including ones added later)</span></label>
                 <div className="widget-fields">
                   {fields.map((f) => (
                     <label key={f.id} className="row">
@@ -347,12 +369,19 @@ function WidgetDialog({ widget, tables, onSave, onClose }: {
                     </label>
                   ))}
                 </div>
-                <label>How many records
-                  <select value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
-                    {[3, 5, 8, 10, 15, 20, 30, 50].map((n) => <option key={n} value={n}>{n}</option>)}
-                  </select>
-                </label>
-                <span className="field-hint">Records come in the order of the chosen view (sort it there).</span>
+                <div className="form-2col">
+                  <label>Order
+                    <select value={order} onChange={(e) => setOrder(e.target.value as "view" | "newest")}>
+                      <option value="newest">Newest first</option>
+                      <option value="view">As sorted in the view</option>
+                    </select>
+                  </label>
+                  <label>How many records
+                    <select value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
+                      {[3, 5, 8, 10, 15, 20, 30, 50].map((n) => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </label>
+                </div>
               </>
             )}
           </>
@@ -375,4 +404,54 @@ function WidgetDialog({ widget, tables, onSave, onClose }: {
 /** Dashboards of a base: the tab list and the selected one. */
 export function useDashboards(baseId: string) {
   return useQuery({ queryKey: ["dashboards", baseId], queryFn: () => api.dashboards(baseId) });
+}
+
+/** New dashboard: about one table (with ready-made widgets) or a blank one that mixes tables. */
+export function NewDashboardDialog({ tables, dashboards, onCreate, onClose }: {
+  tables: Table[]; dashboards: Dashboard[];
+  onCreate: (body: { name: string; tableId: string | null; starter: boolean }) => void; onClose: () => void;
+}) {
+  const has = new Set(dashboards.map((d) => d.tableId));
+  const firstFree = tables.find((t) => !has.has(t.id)) ?? tables[0];
+  const [tableId, setTableId] = useState<string | null>(firstFree?.id ?? null);
+  const [name, setName] = useState(firstFree?.name ?? `Dashboard ${dashboards.length + 1}`);
+  const [touched, setTouched] = useState(false);
+  const [starter, setStarter] = useState(true);
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [onClose]);
+  const pick = (id: string | null) => {
+    setTableId(id);
+    if (!touched) setName(id ? tables.find((t) => t.id === id)?.name ?? "" : `Dashboard ${dashboards.length + 1}`);
+  };
+  return (
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <form className="modal" onSubmit={(e) => { e.preventDefault(); if (name.trim()) onCreate({ name: name.trim(), tableId, starter: !!tableId && starter }); }}>
+        <div className="modal-head">
+          <h3>New dashboard</h3>
+          <div className="spacer" />
+          <button type="button" className="icon-btn" onClick={onClose} title="Close"><X size={18} /></button>
+        </div>
+        <label>Shows records from
+          <select value={tableId ?? ""} onChange={(e) => pick(e.target.value || null)}>
+            {tables.map((t) => <option key={t.id} value={t.id}>{t.name}{has.has(t.id) ? " (already has one)" : ""}</option>)}
+            <option value="">Several tables (start blank)</option>
+          </select>
+        </label>
+        <label>Dashboard name <input value={name} maxLength={120} onChange={(e) => { setName(e.target.value); setTouched(true); }} autoFocus /></label>
+        {tableId && (
+          <label className="check-row">
+            <input type="checkbox" checked={starter} onChange={(e) => setStarter(e.target.checked)} />
+            <span>Start with ready-made widgets: totals, a status chart, records per month and the latest records</span>
+          </label>
+        )}
+        <div className="modal-actions">
+          <button type="button" className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn primary" disabled={!name.trim()}>Create dashboard</button>
+        </div>
+      </form>
+    </div>
+  );
 }

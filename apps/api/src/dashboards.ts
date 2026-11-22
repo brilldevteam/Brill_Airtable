@@ -1,5 +1,5 @@
 import {
-  cellToText, defaultViewConfig, effectiveType, formatDateCell, formatNumber, groupKey, newId, viewConfigSchema, widgetSchema,
+  cellToText, defaultListFieldIds, defaultViewConfig, effectiveType, formatDateCell, formatNumber, groupKey, newId, starterWidgets, viewConfigSchema, widgetSchema,
   type CellValue, type Dashboard, type Field, type Metric, type RecordRow, type Widget, type WidgetData,
 } from "@brill/shared";
 import type { FastifyInstance } from "fastify";
@@ -17,9 +17,9 @@ import { buildViewQuery } from "./viewQuery";
  * gets totals and the few records a list displays.
  */
 
-interface Row { id: string; base_id: string; name: string; widgets: unknown; position: number; updated_at: string }
+interface Row { id: string; base_id: string; table_id: string | null; name: string; widgets: unknown; position: number; updated_at: string }
 const toDashboard = (r: Row): Dashboard => ({
-  id: r.id, baseId: r.base_id, name: r.name, position: r.position,
+  id: r.id, baseId: r.base_id, tableId: r.table_id ?? null, name: r.name, position: r.position,
   widgets: z.array(widgetSchema).parse(r.widgets ?? []),
   updatedAt: new Date(r.updated_at).toISOString(),
 });
@@ -116,12 +116,14 @@ async function compute(db: Db, w: Widget, load: (tableId: string, viewId: string
     return { type: "number", value: m.value, display: show(m.field, m.value), records: records.length };
   }
   if (w.type === "list") {
-    const shown = records.slice(0, w.limit);
-    const ids = w.fieldIds.length ? w.fieldIds : fields.slice(0, 4).map((f) => f.id);
+    const ordered = w.order === "newest" ? [...records].sort((a, b) => b.createdAt.localeCompare(a.createdAt)) : records;
+    const shown = ordered.slice(0, w.limit);
+    const ids = w.fieldIds.length ? w.fieldIds : defaultListFieldIds(fields);
     const used = ids.map((id) => fields.find((f) => f.id === id)).filter((f): f is Field => !!f);
-    const { labels } = await displayData(db, used, shown);
+    const { labels, files } = await displayData(db, used, shown);
     return {
       type: "list",
+      files,
       fields: used.map((f) => ({ id: f.id, name: f.name, type: f.type, options: f.options as Record<string, unknown> })),
       records: shown.map((r) => ({ id: r.id, cells: Object.fromEntries(used.map((f) => [f.id, r.cells[f.id] ?? null])) })),
       labels,
@@ -214,12 +216,23 @@ export function registerDashboards(app: FastifyInstance, db: Db) {
     const user = requireUser(req);
     const { baseId } = req.params as { baseId: string };
     await baseAccess(db, user.id, baseId, "creator");
-    const body = z.object({ name: z.string().trim().min(1).max(120), widgets: z.array(widgetSchema).max(40).default([]) }).parse(req.body);
+    const body = z.object({
+      name: z.string().trim().min(1).max(120),
+      widgets: z.array(widgetSchema).max(40).default([]),
+      /** A dashboard about one table; with starter, it comes with ready-made widgets for it. */
+      tableId: z.string().nullable().default(null),
+      starter: z.boolean().default(false),
+    }).parse(req.body);
+    if (body.tableId) {
+      const t = await db.one<{ primary_field_id: string }>(`SELECT primary_field_id FROM tables WHERE id=$1 AND base_id=$2`, [body.tableId, baseId]);
+      if (!t) throw new HttpError(400, "Choose a table in this base");
+      if (body.starter && body.widgets.length === 0) body.widgets = starterWidgets(body.tableId, await loadFields(db, body.tableId), t.primary_field_id);
+    }
     await validate(baseId, body.widgets);
     const pos = await db.one<{ n: number }>(`SELECT COALESCE(MAX(position)+1,0)::int AS n FROM dashboards WHERE base_id=$1`, [baseId]);
     const row = await db.one<Row>(
-      `INSERT INTO dashboards (id, base_id, name, widgets, position, created_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [newId("dsh"), baseId, body.name, JSON.stringify(body.widgets), pos!.n, user.id],
+      `INSERT INTO dashboards (id, base_id, table_id, name, widgets, position, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [newId("dsh"), baseId, body.tableId, body.name, JSON.stringify(body.widgets), pos!.n, user.id],
     );
     return { dashboard: toDashboard(row!) };
   });

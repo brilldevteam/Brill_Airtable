@@ -6,3 +6,4 @@ export * from "./formula";
 export * from "./summary";
 export * from "./automations";
 export * from "./dashboards";
+export * from "./fill";

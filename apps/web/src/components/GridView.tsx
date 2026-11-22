@@ -4,13 +4,14 @@ import {
   GridCellKind,
   type DataEditorRef,
   type EditableGridCell,
+  type FillPatternEventArgs,
   type GridCell,
   type GridColumn,
   type GridSelection,
   type Item,
 } from "@glideapps/glide-data-grid";
 import {
-  cellToText, COMPUTED_TYPES, FIELD_TYPE_LABELS, groupKey, isNumericField, orderedFieldIds, summarize, SUMMARY_LABELS, summaryKindsFor,
+  cellToText, COMPUTED_TYPES, FIELD_TYPE_LABELS, fillSeries, groupKey, isNumericField, orderedFieldIds, summarize, SUMMARY_LABELS, summaryKindsFor,
   type CellValue, type Field, type LinkLabels, type RecordRow, type SummaryKind,
 } from "@brill/shared";
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
@@ -327,8 +328,71 @@ export function GridView({ ctx }: { ctx: ViewContext }) {
 
   const selectedIds = selection.rows.toArray().map((i) => rows[i]?.id).filter(Boolean) as string[];
 
+  /**
+   * Drag-to-fill down (or up): dates, numbered text and number steps continue as a series
+   * (see fillSeries); other values repeat. Sideways fills keep the grid's plain copy.
+   */
+  const onFillPattern = ({ patternSource: src, fillDestination: dest, preventDefault }: FillPatternEventArgs) => {
+    if (dest.x !== src.x || dest.width !== src.width || dest.height <= src.height) return;
+    preventDefault();
+    if (!ctx.canEdit) return;
+    const up = dest.y < src.y;
+    const sourceRecs = rows.slice(src.y, src.y + src.height).filter((r): r is RecordRow => !!r);
+    const targetRows: number[] = [];
+    if (up) for (let y = src.y - 1; y >= dest.y; y--) targetRows.push(y);
+    else for (let y = src.y + src.height; y < dest.y + dest.height; y++) targetRows.push(y);
+    const targets = targetRows.map((y) => rows[y]).filter((r): r is RecordRow => !!r);
+    if (!sourceRecs.length || !targets.length) return;
+    const patches = new Map<string, Record<string, CellValue>>();
+    for (let col = src.x; col < src.x + src.width; col++) {
+      const f = fields[col];
+      if (!f || COMPUTED_TYPES.has(f.type) || f.type === "link" || f.type === "attachment" || !ctx.canEditField(f)) continue;
+      const vals = sourceRecs.map((r) => r.cells[f.id] ?? null);
+      const out = fillSeries(f, up ? [...vals].reverse() : vals, targets.length, up ? -1 : 1);
+      targets.forEach((r, i) => {
+        const p = patches.get(r.id) ?? {};
+        p[f.id] = out[i] ?? null;
+        patches.set(r.id, p);
+      });
+    }
+    for (const [id, patch] of patches) saveCells(id, patch);
+    // Show the filled range as the new selection, like a spreadsheet.
+    setSelection((sel) => ({ ...sel, current: sel.current && { ...sel.current, range: dest, rangeStack: [] } }));
+  };
+
+  const deleteSelectedRecords = async (ids: string[]) => {
+    if (!ctx.canDeleteRecords || ids.length === 0) return;
+    const n = ids.length;
+    const ok = await dialogs.confirm({
+      title: `Delete ${n} record${n === 1 ? "" : "s"}?`,
+      message: "They move to the Trash (⋯ → Trash) for 30 days, and you can undo straight away with Ctrl+Z.",
+      confirmText: "Delete",
+      danger: true,
+    });
+    if (ok) { void ctx.deleteRecords(ids); setSelection(emptySelection); }
+  };
+
+  // Right-click on a record: act on it (or on all selected records, if it's one of them).
+  const [rowMenu, setRowMenu] = useState<{ ids: string[]; anchor: Anchor } | null>(null);
+  const onCellContextMenu = ([, row]: Item, e: { bounds: Anchor; localEventX: number; localEventY: number; preventDefault: () => void }) => {
+    e.preventDefault();
+    const r = rows[row];
+    if (!r) return;
+    let ids = selectedIds;
+    if (!selection.rows.hasIndex(row)) {
+      ids = [r.id];
+      if (selection.rows.length) setSelection({ ...emptySelection, rows: CompactSelection.fromSingleSelection(row) });
+    }
+    setRowMenu({ ids, anchor: { x: e.bounds.x + e.localEventX, y: e.bounds.y + e.localEventY, width: 0, height: 0 } });
+  };
+
   const onDelete = (sel: GridSelection) => {
     if (!ctx.canEdit) return false;
+    // Whole records selected (row checkboxes): Delete removes the records, after asking.
+    if (sel.rows.length > 0) {
+      void deleteSelectedRecords(sel.rows.toArray().map((i) => rows[i]?.id).filter(Boolean) as string[]);
+      return false;
+    }
     const rect = sel.current?.range;
     if (!rect) return true;
     for (let row = rect.y; row < rect.y + rect.height; row++) {
@@ -395,6 +459,9 @@ export function GridView({ ctx }: { ctx: ViewContext }) {
           getCellsForSelection={true}
           onPaste={true}
           fillHandle={true}
+          onFillPattern={onFillPattern}
+          onCellContextMenu={onCellContextMenu}
+          rowSelectionMode="multi"
           rowMarkers={grouped ? "checkbox" : "both"}
           rowMarkerWidth={grouped ? 40 : 52}
           onCellClicked={([, row]) => { const it = items[row]; if (it?.kind === "group") toggleGroup(it.path); }}
@@ -489,23 +556,30 @@ export function GridView({ ctx }: { ctx: ViewContext }) {
           {selectedIds.length === 1 && (
             <button className="btn sm" onClick={() => ctx.openRecord(selectedIds[0])}><Maximize2 size={14} /> Expand</button>
           )}
-          {ctx.canDeleteRecords && <button
-            className="btn sm danger"
-            onClick={async () => {
-              const n = selectedIds.length;
-              const ok = await dialogs.confirm({
-                title: `Delete ${n} record${n === 1 ? "" : "s"}?`,
-                message: "They move to the Trash (⋯ → Trash) for 30 days, and you can undo straight away with Ctrl+Z.",
-                confirmText: "Delete",
-                danger: true,
-              });
-              if (ok) { ctx.deleteRecords(selectedIds); setSelection(emptySelection); }
-            }}
-          >
+          {ctx.canDeleteRecords && <button className="btn sm danger" onClick={() => deleteSelectedRecords(selectedIds)}>
             <Trash2 size={14} /> Delete
           </button>}
           <button className="icon-btn" title="Clear selection" onClick={() => setSelection(emptySelection)}><X size={15} /></button>
         </div>
+      )}
+
+      {rowMenu && (
+        <Popover anchor={rowMenu.anchor} onClose={() => setRowMenu(null)} minWidth={230}>
+          <div className="menu">
+            {rowMenu.ids.length === 1 && (
+              <button onClick={() => { ctx.openRecord(rowMenu.ids[0]); setRowMenu(null); }}><Maximize2 size={15} /> Expand record</button>
+            )}
+            {rowMenu.ids.length > 1 && <div className="menu-label">{rowMenu.ids.length} records selected</div>}
+            <button onClick={() => { setSelection(emptySelection); setRowMenu(null); }}><X size={15} /> Clear selection</button>
+            {ctx.canDeleteRecords && (
+              <><hr />
+                <button className="danger" onClick={() => { const ids = rowMenu.ids; setRowMenu(null); void deleteSelectedRecords(ids); }}>
+                  <Trash2 size={15} /> {rowMenu.ids.length === 1 ? "Delete record" : `Delete all ${rowMenu.ids.length} selected records`}
+                </button>
+              </>
+            )}
+          </div>
+        </Popover>
       )}
 
       {fieldMenu && (

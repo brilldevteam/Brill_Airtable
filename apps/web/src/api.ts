@@ -233,7 +233,8 @@ export const api = {
   createRecord: (tableId: string, cells: Record<string, unknown> = {}) =>
     call<{ record: RecordRow }>("POST", `/api/tables/${tableId}/records`, { cells }),
   dashboards: (baseId: string) => call<{ dashboards: Dashboard[] }>("GET", `/api/bases/${baseId}/dashboards`),
-  createDashboard: (baseId: string, name: string) => call<{ dashboard: Dashboard }>("POST", `/api/bases/${baseId}/dashboards`, { name }),
+  createDashboard: (baseId: string, body: { name: string; tableId?: string | null; starter?: boolean }) =>
+    call<{ dashboard: Dashboard }>("POST", `/api/bases/${baseId}/dashboards`, body),
   updateDashboard: (id: string, patch: { name?: string; widgets?: Widget[] }) => call<{ dashboard: Dashboard }>("PATCH", `/api/dashboards/${id}`, patch),
   deleteDashboard: (id: string) => call("DELETE", `/api/dashboards/${id}`),
   dashboardData: (id: string) => call<{ data: Record<string, WidgetData> }>("GET", `/api/dashboards/${id}/data`),

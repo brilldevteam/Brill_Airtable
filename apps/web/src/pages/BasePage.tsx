@@ -10,7 +10,7 @@ import { useDialogs } from "../components/Dialogs";
 import { Popover, anchorOf, type Anchor } from "../components/Popover";
 import { ShareDialog } from "../components/ShareDialog";
 import { AutomationsPanel } from "../components/AutomationsPanel";
-import { DashboardView, useDashboards } from "../components/DashboardView";
+import { DashboardView, NewDashboardDialog, useDashboards } from "../components/DashboardView";
 import type { Dashboard } from "@brill/shared";
 import { TableWorkspace } from "../components/TableWorkspace";
 import { useBaseEvents } from "../useBaseEvents";
@@ -32,6 +32,7 @@ export function BasePage() {
   const [tableMenu, setTableMenu] = useState<{ table: Table; anchor: Anchor } | null>(null);
   const [sharing, setSharing] = useState(false);
   const [automating, setAutomating] = useState(false);
+  const [newDash, setNewDash] = useState(false);
   const live = useBaseEvents(baseId);
 
   const tables = q.data?.tables ?? [];
@@ -102,14 +103,18 @@ export function BasePage() {
     });
     if (ok) run(async () => { await api.deleteTable(t.id); await refresh(); });
   };
-  const addDashboard = async () => {
-    const name = await dialogs.prompt({ title: "New dashboard", label: "Dashboard name", defaultValue: `Dashboard ${dashboards.length + 1}`, confirmText: "Create dashboard" });
-    if (name) run(async () => {
-      const { dashboard } = await api.createDashboard(baseId!, name);
-      await qc.invalidateQueries({ queryKey: ["dashboards", baseId] });
-      nav(`/base/${baseId}/dash/${dashboard.id}`);
-    });
-  };
+  const addDashboard = () => setNewDash(true);
+  /** One ready-made dashboard per table that doesn't have one yet. */
+  const dashboardPerTable = () => run(async () => {
+    const have = new Set(dashboards.map((d) => d.tableId));
+    let first: string | null = null;
+    for (const t of tables.filter((x) => !have.has(x.id))) {
+      const { dashboard } = await api.createDashboard(baseId!, { name: t.name, tableId: t.id, starter: true });
+      first ??= dashboard.id;
+    }
+    await qc.invalidateQueries({ queryKey: ["dashboards", baseId] });
+    if (first) nav(`/base/${baseId}/dash/${first}`);
+  });
   const addTable = async () => {
     const name = await dialogs.prompt({ title: "Add a table", label: "Table name", defaultValue: `Table ${tables.length + 1}`, confirmText: "Create table" });
     if (name) run(async () => { const { table } = await api.createTable(base.id, name); await refresh(); nav(`/base/${baseId}/${table.id}`); });
@@ -150,7 +155,7 @@ export function BasePage() {
             className={"tab" + (d.id === dashId ? " active" : "")}
             onContextMenu={(e) => { if (!canDesign) return; e.preventDefault(); setDashMenu({ dash: d, anchor: anchorOf(e.currentTarget) }); }}
           >
-            <LayoutDashboard size={15} />
+            {d.tableId ? <Sheet size={15} /> : <LayoutDashboard size={15} />}
             {d.name}
             {d.id === dashId && canDesign && (
               <span className="tab-menu" role="button" title="Dashboard options"
@@ -207,13 +212,31 @@ export function BasePage() {
             <div className="dash-empty" style={{ marginTop: 60 }}>
               <LayoutDashboard size={26} />
               <strong>No dashboards yet</strong>
-              <span>Dashboards show numbers, charts and lists from your tables — they update as records change.</span>
-              {canDesign && <button className="btn primary" onClick={addDashboard}><Plus size={15} /> Create a dashboard</button>}
+              <span>Dashboards show numbers, charts and the latest records from your tables — they update as records change.</span>
+              {canDesign && (
+                <div className="dash-empty-actions">
+                  {tables.length > 0 && <button className="btn primary" onClick={dashboardPerTable}><Sheet size={15} /> Create a dashboard for each table</button>}
+                  <button className="btn" onClick={addDashboard}><Plus size={15} /> New dashboard</button>
+                </div>
+              )}
             </div>
           );
         }
         return <DashboardView key={d.id} dashboard={d} tables={tables} canDesign={canDesign} />;
       })()}
+      {newDash && (
+        <NewDashboardDialog
+          tables={tables}
+          dashboards={dashboards}
+          onClose={() => setNewDash(false)}
+          onCreate={(body) => run(async () => {
+            setNewDash(false);
+            const { dashboard } = await api.createDashboard(baseId!, body);
+            await qc.invalidateQueries({ queryKey: ["dashboards", baseId] });
+            nav(`/base/${baseId}/dash/${dashboard.id}`);
+          })}
+        />
+      )}
       {dashMenu && (
         <Popover anchor={dashMenu.anchor} onClose={() => setDashMenu(null)} minWidth={200}>
           <div className="menu">
